@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import SearchContext from './SearchContext';
 import Stage1 from './Stage1';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
@@ -8,6 +9,7 @@ import './ChatInterface.css';
 export default function ChatInterface({
   conversation,
   onSendMessage,
+  onAbort,
   isLoading,
 }) {
   const [input, setInput] = useState('');
@@ -73,6 +75,22 @@ export default function ChatInterface({
                 <div className="assistant-message">
                   <div className="message-label">LLM Council</div>
 
+                  {/* Search Loading */}
+                  {msg.loading?.search && (
+                    <div className="stage-loading">
+                      <div className="spinner"></div>
+                      <span>Searching the web...</span>
+                    </div>
+                  )}
+
+                  {/* Search Context (if web search was used) */}
+                  {msg.metadata?.search_context && (
+                    <SearchContext
+                      searchQuery={msg.metadata?.search_query}
+                      searchContext={msg.metadata?.search_context}
+                    />
+                  )}
+
                   {/* Stage 1 */}
                   {msg.loading?.stage1 && (
                     <div className="stage-loading">
@@ -115,6 +133,9 @@ export default function ChatInterface({
           <div className="loading-indicator">
             <div className="spinner"></div>
             <span>Consulting the council...</span>
+            <button className="abort-btn" onClick={onAbort}>
+              Stop
+            </button>
           </div>
         )}
 

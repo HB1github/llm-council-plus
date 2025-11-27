@@ -71,6 +71,24 @@
   font-size: 14px;
 }
 
+.abort-btn {
+  margin-left: auto;
+  padding: 6px 14px;
+  background: #fff;
+  border: 1px solid #d32f2f;
+  border-radius: 6px;
+  color: #d32f2f;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.abort-btn:hover {
+  background: #ffebee;
+  border-color: #c62828;
+  color: #c62828;
+}
+
 .stage-loading {
   display: flex;
   align-items: center;

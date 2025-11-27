@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
+import Settings from './components/Settings';
 import { api } from './api';
 import './App.css';
 
@@ -9,6 +10,8 @@ function App() {
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const abortControllerRef = useRef(null);
 
   // Load conversations on mount
   useEffect(() => {
@@ -57,8 +60,34 @@ function App() {
     setCurrentConversationId(id);
   };
 
+  const handleDeleteConversation = async (id) => {
+    try {
+      await api.deleteConversation(id);
+      // Remove from local state
+      setConversations(conversations.filter(c => c.id !== id));
+      // If we deleted the current conversation, clear it
+      if (id === currentConversationId) {
+        setCurrentConversationId(null);
+        setCurrentConversation(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete conversation:', error);
+    }
+  };
+
+  const handleAbort = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsLoading(false);
+    }
+  };
+
   const handleSendMessage = async (content, webSearch) => {
     if (!currentConversationId) return;
+
+    // Create new AbortController for this request
+    abortControllerRef.current = new AbortController();
 
     setIsLoading(true);
     try {
@@ -77,6 +106,7 @@ function App() {
         stage3: null,
         metadata: null,
         loading: {
+          search: false,
           stage1: false,
           stage2: false,
           stage3: false,
@@ -93,11 +123,27 @@ function App() {
       await api.sendMessageStream(currentConversationId, content, webSearch, (eventType, event) => {
         switch (eventType) {
           case 'search_start':
-            // Optional: Show search status if needed, or just let it be part of the loading state
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = messages[messages.length - 1];
+              lastMsg.loading.search = true;
+              return { ...prev, messages };
+            });
             break;
 
           case 'search_complete':
-            // Optional: Store search results if we want to display them
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = messages[messages.length - 1];
+              lastMsg.loading.search = false;
+              // Set metadata with search results immediately
+              lastMsg.metadata = {
+                ...lastMsg.metadata,
+                search_query: event.data.search_query,
+                search_context: event.data.search_context,
+              };
+              return { ...prev, messages };
+            });
             break;
 
           case 'stage1_start':
@@ -177,8 +223,13 @@ function App() {
           default:
             console.log('Unknown event type:', eventType);
         }
-      });
+      }, abortControllerRef.current?.signal);
     } catch (error) {
+      // Don't show error for aborted requests
+      if (error.name === 'AbortError') {
+        console.log('Request aborted');
+        return;
+      }
       console.error('Failed to send message:', error);
       // Remove optimistic messages on error
       setCurrentConversation((prev) => ({
@@ -186,6 +237,8 @@ function App() {
         messages: prev.messages.slice(0, -2),
       }));
       setIsLoading(false);
+    } finally {
+      abortControllerRef.current = null;
     }
   };
 
@@ -196,12 +249,18 @@ function App() {
         currentConversationId={currentConversationId}
         onSelectConversation={handleSelectConversation}
         onNewConversation={handleNewConversation}
+        onDeleteConversation={handleDeleteConversation}
+        onOpenSettings={() => setShowSettings(true)}
       />
       <ChatInterface
         conversation={currentConversation}
         onSendMessage={handleSendMessage}
+        onAbort={handleAbort}
         isLoading={isLoading}
       />
+      {showSettings && (
+        <Settings onClose={() => setShowSettings(false)} />
+      )}
     </div>
   );
 }

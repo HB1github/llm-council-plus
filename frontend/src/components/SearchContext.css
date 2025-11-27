@@ -1,0 +1,124 @@
+.search-context {
+  margin: 16px 0;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fefefe;
+  overflow: hidden;
+}
+
+/* Accordion Header */
+.search-accordion-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+  transition: background 0.2s;
+}
+
+.search-accordion-header:hover {
+  background: #f0f1f2;
+}
+
+.search-accordion-header.expanded {
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.search-icon {
+  font-size: 16px;
+}
+
+.search-label {
+  font-weight: 600;
+  color: #555;
+}
+
+.search-query-preview {
+  flex: 1;
+  text-align: left;
+  color: #666;
+  font-style: italic;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 400px;
+}
+
+.accordion-arrow {
+  color: #888;
+  font-size: 10px;
+  margin-left: auto;
+}
+
+/* Accordion Content */
+.search-accordion-content {
+  padding: 16px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.search-results-raw {
+  background: #f5f5f5;
+  border-radius: 6px;
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.search-results-raw pre {
+  margin: 0;
+  font-size: 12px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  color: #444;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Sources Section */
+.search-sources {
+  padding: 12px 16px;
+  background: #f8f9fa;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sources-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+}
+
+.sources-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.source-link {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #e3f2fd;
+  border: 1px solid #bbdefb;
+  border-radius: 4px;
+  color: #1565c0;
+  font-size: 12px;
+  text-decoration: none;
+  transition: all 0.2s;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-link:hover {
+  background: #bbdefb;
+  border-color: #90caf9;
+  color: #0d47a1;
+}

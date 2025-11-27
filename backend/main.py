@@ -4,15 +4,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+import os
 import uuid
 import json
 import asyncio
 
 from . import storage
-from . import storage
-from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
-from .search import perform_web_search
+from .council import run_full_council, generate_conversation_title, generate_search_query, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
+from .search import perform_web_search, SearchProvider
+from .settings import get_settings, update_settings, Settings, DEFAULT_COUNCIL_MODELS, DEFAULT_CHAIRMAN_MODEL
 
 app = FastAPI(title="LLM Council API")
 
@@ -82,6 +83,15 @@ async def get_conversation(conversation_id: str):
     return conversation
 
 
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str):
+    """Delete a conversation."""
+    deleted = storage.delete_conversation(conversation_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"status": "deleted"}
+
+
 @app.post("/api/conversations/{conversation_id}/message")
 async def send_message(conversation_id: str, request: SendMessageRequest):
     """
@@ -110,12 +120,13 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
         request.web_search
     )
 
-    # Add assistant message with all stages
+    # Add assistant message with all stages and metadata
     storage.add_assistant_message(
         conversation_id,
         stage1_results,
         stage2_results,
-        stage3_result
+        stage3_result,
+        metadata
     )
 
     # Return the complete response with metadata
@@ -153,11 +164,23 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
             # Perform web search if requested
             search_context = ""
+            search_query = ""
             if request.web_search:
-                yield f"data: {json.dumps({'type': 'search_start'})}\n\n"
-                # Run in thread to avoid blocking
-                search_context = await asyncio.to_thread(perform_web_search, request.content)
-                yield f"data: {json.dumps({'type': 'search_complete', 'data': search_context})}\n\n"
+                settings = get_settings()
+                provider = SearchProvider(settings.search_provider)
+
+                # Set API keys if configured
+                if settings.tavily_api_key and provider == SearchProvider.TAVILY:
+                    os.environ["TAVILY_API_KEY"] = settings.tavily_api_key
+                if settings.brave_api_key and provider == SearchProvider.BRAVE:
+                    os.environ["BRAVE_API_KEY"] = settings.brave_api_key
+
+                yield f"data: {json.dumps({'type': 'search_start', 'data': {'provider': provider.value}})}\n\n"
+                # Generate optimized search query
+                search_query = await generate_search_query(request.content)
+                # Run search in thread to avoid blocking
+                search_context = await asyncio.to_thread(perform_web_search, search_query, 5, provider, settings.full_content_results)
+                yield f"data: {json.dumps({'type': 'search_complete', 'data': {'search_query': search_query, 'search_context': search_context, 'provider': provider.value}})}\n\n"
 
             # Stage 1: Collect responses
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
@@ -168,7 +191,7 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
             stage2_results, label_to_model = await stage2_collect_rankings(request.content, stage1_results, search_context)
             aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
-            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings, 'search_context': search_context}})}\n\n"
+            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings, 'search_query': search_query, 'search_context': search_context}})}\n\n"
 
             # Stage 3: Synthesize final answer
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
@@ -181,12 +204,20 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
                 storage.update_conversation_title(conversation_id, title)
                 yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
 
-            # Save complete assistant message
+            # Save complete assistant message with metadata
+            metadata = {
+                "label_to_model": label_to_model,
+                "aggregate_rankings": aggregate_rankings,
+            }
+            if search_query:
+                metadata["search_query"] = search_query
+
             storage.add_assistant_message(
                 conversation_id,
                 stage1_results,
                 stage2_results,
-                stage3_result
+                stage3_result,
+                metadata
             )
 
             # Send completion event
@@ -204,6 +235,255 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             "Connection": "keep-alive",
         }
     )
+
+
+class UpdateSettingsRequest(BaseModel):
+    """Request to update settings."""
+    search_provider: Optional[str] = None
+    full_content_results: Optional[int] = None
+    tavily_api_key: Optional[str] = None
+    brave_api_key: Optional[str] = None
+    openrouter_api_key: Optional[str] = None
+    council_models: Optional[List[str]] = None
+    chairman_model: Optional[str] = None
+
+
+class TestTavilyRequest(BaseModel):
+    """Request to test Tavily API key."""
+    api_key: str
+
+
+@app.get("/api/settings")
+async def get_app_settings():
+    """Get current application settings."""
+    settings = get_settings()
+    return {
+        "search_provider": settings.search_provider,
+        "full_content_results": settings.full_content_results,
+        "tavily_api_key_set": bool(settings.tavily_api_key),
+        "brave_api_key_set": bool(settings.brave_api_key),
+        "openrouter_api_key_set": bool(settings.openrouter_api_key),
+        "council_models": settings.council_models,
+        "chairman_model": settings.chairman_model,
+    }
+
+
+@app.get("/api/settings/defaults")
+async def get_default_settings():
+    """Get default model settings."""
+    return {
+        "council_models": DEFAULT_COUNCIL_MODELS,
+        "chairman_model": DEFAULT_CHAIRMAN_MODEL,
+    }
+
+
+@app.put("/api/settings")
+async def update_app_settings(request: UpdateSettingsRequest):
+    """Update application settings."""
+    updates = {}
+
+    if request.search_provider is not None:
+        # Validate provider
+        try:
+            provider = SearchProvider(request.search_provider)
+            updates["search_provider"] = provider
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid search provider. Must be one of: {[p.value for p in SearchProvider]}"
+            )
+
+    if request.full_content_results is not None:
+        # Validate range
+        if request.full_content_results < 0 or request.full_content_results > 10:
+            raise HTTPException(
+                status_code=400,
+                detail="full_content_results must be between 0 and 10"
+            )
+        updates["full_content_results"] = request.full_content_results
+
+    if request.tavily_api_key is not None:
+        updates["tavily_api_key"] = request.tavily_api_key
+        # Also set in environment for immediate use
+        if request.tavily_api_key:
+            os.environ["TAVILY_API_KEY"] = request.tavily_api_key
+
+    if request.brave_api_key is not None:
+        updates["brave_api_key"] = request.brave_api_key
+        # Also set in environment for immediate use
+        if request.brave_api_key:
+            os.environ["BRAVE_API_KEY"] = request.brave_api_key
+
+    if request.openrouter_api_key is not None:
+        updates["openrouter_api_key"] = request.openrouter_api_key
+
+    if request.council_models is not None:
+        # Validate that at least one model is selected
+        if len(request.council_models) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="At least one council model must be selected"
+            )
+        updates["council_models"] = request.council_models
+
+    if request.chairman_model is not None:
+        updates["chairman_model"] = request.chairman_model
+
+    if updates:
+        settings = update_settings(**updates)
+    else:
+        settings = get_settings()
+
+    return {
+        "search_provider": settings.search_provider,
+        "tavily_api_key_set": bool(settings.tavily_api_key),
+        "brave_api_key_set": bool(settings.brave_api_key),
+        "openrouter_api_key_set": bool(settings.openrouter_api_key),
+        "council_models": settings.council_models,
+        "chairman_model": settings.chairman_model,
+    }
+
+
+@app.post("/api/settings/test-tavily")
+async def test_tavily_api(request: TestTavilyRequest):
+    """Test Tavily API key with a simple search."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": request.api_key,
+                    "query": "test",
+                    "max_results": 1,
+                    "search_depth": "basic",
+                },
+            )
+
+            if response.status_code == 200:
+                return {"success": True, "message": "API key is valid"}
+            elif response.status_code == 401:
+                return {"success": False, "message": "Invalid API key"}
+            else:
+                return {"success": False, "message": f"API error: {response.status_code}"}
+
+    except httpx.TimeoutException:
+        return {"success": False, "message": "Request timed out"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+class TestBraveRequest(BaseModel):
+    """Request to test Brave API key."""
+    api_key: str
+
+
+@app.post("/api/settings/test-brave")
+async def test_brave_api(request: TestBraveRequest):
+    """Test Brave API key with a simple search."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                "https://api.search.brave.com/res/v1/web/search",
+                params={"q": "test", "count": 1},
+                headers={
+                    "Accept": "application/json",
+                    "X-Subscription-Token": request.api_key,
+                },
+            )
+
+            if response.status_code == 200:
+                return {"success": True, "message": "API key is valid"}
+            elif response.status_code == 401 or response.status_code == 403:
+                return {"success": False, "message": "Invalid API key"}
+            else:
+                return {"success": False, "message": f"API error: {response.status_code}"}
+
+    except httpx.TimeoutException:
+        return {"success": False, "message": "Request timed out"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+class TestOpenRouterRequest(BaseModel):
+    """Request to test OpenRouter API key."""
+    api_key: str
+
+
+@app.get("/api/models")
+async def get_openrouter_models():
+    """Fetch available models from OpenRouter API."""
+    import httpx
+    from .config import get_openrouter_api_key
+
+    api_key = get_openrouter_api_key()
+    if not api_key:
+        return {"models": [], "error": "No OpenRouter API key configured"}
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                "https://openrouter.ai/api/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+
+            if response.status_code != 200:
+                return {"models": [], "error": f"API error: {response.status_code}"}
+
+            data = response.json()
+            models = []
+            for model in data.get("data", []):
+                # Extract pricing - free models have 0 cost
+                pricing = model.get("pricing", {})
+                prompt_price = float(pricing.get("prompt", "0") or "0")
+                completion_price = float(pricing.get("completion", "0") or "0")
+                is_free = prompt_price == 0 and completion_price == 0
+
+                models.append({
+                    "id": model.get("id"),
+                    "name": model.get("name", model.get("id")),
+                    "context_length": model.get("context_length"),
+                    "is_free": is_free,
+                })
+
+            # Sort by name
+            models.sort(key=lambda x: x["name"].lower())
+            return {"models": models}
+
+    except httpx.TimeoutException:
+        return {"models": [], "error": "Request timed out"}
+    except Exception as e:
+        return {"models": [], "error": str(e)}
+
+
+@app.post("/api/settings/test-openrouter")
+async def test_openrouter_api(request: TestOpenRouterRequest):
+    """Test OpenRouter API key with a simple request."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                "https://openrouter.ai/api/v1/models",
+                headers={
+                    "Authorization": f"Bearer {request.api_key}",
+                },
+            )
+
+            if response.status_code == 200:
+                return {"success": True, "message": "API key is valid"}
+            elif response.status_code == 401:
+                return {"success": False, "message": "Invalid API key"}
+            else:
+                return {"success": False, "message": f"API error: {response.status_code}"}
+
+    except httpx.TimeoutException:
+        return {"success": False, "message": "Request timed out"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
 
 
 if __name__ == "__main__":

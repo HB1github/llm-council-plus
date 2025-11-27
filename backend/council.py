@@ -3,8 +3,9 @@
 from typing import List, Dict, Any, Tuple
 import asyncio
 from .openrouter import query_models_parallel, query_model
-from .config import COUNCIL_MODELS, CHAIRMAN_MODEL
-from .search import perform_web_search
+from .config import get_council_models, get_chairman_model
+from .search import perform_web_search, SearchProvider
+from .settings import get_settings
 
 
 async def stage1_collect_responses(user_query: str, search_context: str = "") -> List[Dict[str, Any]]:
@@ -33,16 +34,27 @@ Question: {user_query}"""
     messages = [{"role": "user", "content": prompt}]
 
     # Query all models in parallel
-    responses = await query_models_parallel(COUNCIL_MODELS, messages)
+    responses = await query_models_parallel(get_council_models(), messages)
 
-    # Format results
+    # Format results - include both successful and failed responses
     stage1_results = []
     for model, response in responses.items():
-        if response is not None:  # Only include successful responses
-            stage1_results.append({
-                "model": model,
-                "response": response.get('content', '')
-            })
+        if response is not None:
+            if response.get('error'):
+                # Include failed models with error info
+                stage1_results.append({
+                    "model": model,
+                    "response": None,
+                    "error": response.get('error'),
+                    "error_message": response.get('error_message', 'Unknown error')
+                })
+            else:
+                # Successful response
+                stage1_results.append({
+                    "model": model,
+                    "response": response.get('content', ''),
+                    "error": None
+                })
 
     return stage1_results
 
@@ -63,19 +75,22 @@ async def stage2_collect_rankings(
     Returns:
         Tuple of (rankings list, label_to_model mapping)
     """
+    # Filter to only successful responses for ranking
+    successful_results = [r for r in stage1_results if not r.get('error')]
+
     # Create anonymized labels for responses (Response A, Response B, etc.)
-    labels = [chr(65 + i) for i in range(len(stage1_results))]  # A, B, C, ...
+    labels = [chr(65 + i) for i in range(len(successful_results))]  # A, B, C, ...
 
     # Create mapping from label to model name
     label_to_model = {
         f"Response {label}": result['model']
-        for label, result in zip(labels, stage1_results)
+        for label, result in zip(labels, successful_results)
     }
 
     # Build the ranking prompt
     responses_text = "\n\n".join([
         f"Response {label}:\n{result['response']}"
-        for label, result in zip(labels, stage1_results)
+        for label, result in zip(labels, successful_results)
     ])
 
     ranking_prompt = f"""You are evaluating different responses to the following question:
@@ -117,19 +132,30 @@ Now provide your evaluation and ranking:"""
     messages = [{"role": "user", "content": ranking_prompt}]
 
     # Get rankings from all council models in parallel
-    responses = await query_models_parallel(COUNCIL_MODELS, messages)
+    responses = await query_models_parallel(get_council_models(), messages)
 
-    # Format results
+    # Format results - include both successful and failed responses
     stage2_results = []
     for model, response in responses.items():
         if response is not None:
-            full_text = response.get('content', '')
-            parsed = parse_ranking_from_text(full_text)
-            stage2_results.append({
-                "model": model,
-                "ranking": full_text,
-                "parsed_ranking": parsed
-            })
+            if response.get('error'):
+                # Include failed models with error info
+                stage2_results.append({
+                    "model": model,
+                    "ranking": None,
+                    "parsed_ranking": [],
+                    "error": response.get('error'),
+                    "error_message": response.get('error_message', 'Unknown error')
+                })
+            else:
+                full_text = response.get('content', '')
+                parsed = parse_ranking_from_text(full_text)
+                stage2_results.append({
+                    "model": model,
+                    "ranking": full_text,
+                    "parsed_ranking": parsed,
+                    "error": None
+                })
 
     return stage2_results, label_to_model
 
@@ -187,17 +213,18 @@ Provide a clear, well-reasoned final answer that represents the council's collec
     messages = [{"role": "user", "content": chairman_prompt}]
 
     # Query the chairman model
-    response = await query_model(CHAIRMAN_MODEL, messages)
+    chairman_model = get_chairman_model()
+    response = await query_model(chairman_model, messages)
 
     if response is None:
         # Fallback if chairman fails
         return {
-            "model": CHAIRMAN_MODEL,
+            "model": chairman_model,
             "response": "Error: Unable to generate final synthesis."
         }
 
     return {
-        "model": CHAIRMAN_MODEL,
+        "model": chairman_model,
         "response": response.get('content', '')
     }
 
@@ -321,6 +348,46 @@ Title:"""
     return title
 
 
+async def generate_search_query(user_query: str) -> str:
+    """
+    Generate optimized search terms from the user's question.
+
+    Args:
+        user_query: The user's full question
+
+    Returns:
+        Optimized search query string
+    """
+    prompt = f"""Extract the key search terms from this question for a web search.
+Return ONLY the search terms (3-6 words), no explanation or formatting.
+Focus on the main topic, entities, and time-relevant terms.
+Remove question words and verbs like "analyze", "explain", "describe".
+
+Question: {user_query}
+
+Search terms:"""
+
+    messages = [{"role": "user", "content": prompt}]
+
+    # Use gemini-2.5-flash for fast query generation
+    response = await query_model("google/gemini-2.5-flash", messages, timeout=15.0)
+
+    if response is None:
+        # Fallback: return original query truncated
+        return user_query[:100]
+
+    search_query = response.get('content', user_query).strip()
+
+    # Clean up - remove quotes, limit length
+    search_query = search_query.strip('"\'')
+
+    # If the model returned something too short or empty, use original
+    if len(search_query) < 5:
+        return user_query[:100]
+
+    return search_query[:100]
+
+
 async def run_full_council(user_query: str, use_web_search: bool = False) -> Tuple[List, List, Dict, Dict]:
     """
     Run the complete 3-stage council process.
@@ -334,11 +401,20 @@ async def run_full_council(user_query: str, use_web_search: bool = False) -> Tup
     """
     # Perform web search if requested
     search_context = ""
+    search_query_used = ""
     if use_web_search:
-        # We use the user query directly for search.
-        # In a more advanced version, we might generate a specific search query.
-        # Run in thread to avoid blocking the event loop
-        search_context = await asyncio.to_thread(perform_web_search, user_query)
+        settings = get_settings()
+        provider = SearchProvider(settings.search_provider)
+        # Generate optimized search query from user's question
+        search_query_used = await generate_search_query(user_query)
+        # Run search in thread to avoid blocking the event loop
+        search_context = await asyncio.to_thread(
+            perform_web_search,
+            search_query_used,
+            5,
+            provider,
+            settings.full_content_results
+        )
 
     # Stage 1: Collect individual responses
     stage1_results = await stage1_collect_responses(user_query, search_context)
@@ -368,6 +444,7 @@ async def run_full_council(user_query: str, use_web_search: bool = False) -> Tup
     metadata = {
         "label_to_model": label_to_model,
         "aggregate_rankings": aggregate_rankings,
+        "search_query": search_query_used,  # The optimized search query used
         "search_context": search_context  # Include search context in metadata for debugging/display
     }
 

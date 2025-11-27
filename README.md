@@ -3,9 +3,9 @@
 ![llmcouncil](header.png)
 
 > [!TIP]
-> **Now with DuckDuckGo Web Search!** 🦆
+> **Now with Web Search!** Supports DuckDuckGo, Brave, and Tavily with full article fetching.
 
-The idea of this repo is that instead of asking a question to your favorite LLM provider (e.g. OpenAI GPT 5.1, Google Gemini 3.0 Pro, Anthropic Claude Sonnet 4.5, xAI Grok 4, eg.c), you can group them into your "LLM Council". This repo is a simple, local web app that essentially looks like ChatGPT except it uses OpenRouter to send your query to multiple LLMs, it then asks them to review and rank each other's work, and finally a Chairman LLM produces the final response.
+The idea of this repo is that instead of asking a question to your favorite LLM provider (e.g. OpenAI GPT 5.1, Google Gemini 3.0 Pro, Anthropic Claude Sonnet 4.5, xAI Grok 4, etc.), you can group them into your "LLM Council". This repo is a simple, local web app that essentially looks like ChatGPT except it uses OpenRouter to send your query to multiple LLMs, it then asks them to review and rank each other's work, and finally a Chairman LLM produces the final response.
 
 In a bit more detail, here is what happens when you submit a query:
 
@@ -35,32 +35,7 @@ npm install
 cd ..
 ```
 
-### 2. Configure API Key
-
-Create a `.env` file in the project root:
-
-```bash
-OPENROUTER_API_KEY=sk-or-v1-...
-```
-
-Get your API key at [openrouter.ai](https://openrouter.ai/). Make sure to purchase the credits you need, or sign up for automatic top up.
-
-### 3. Configure Models (Optional)
-
-Edit `backend/config.py` to customize the council:
-
-```python
-COUNCIL_MODELS = [
-    "openai/gpt-5.1",
-    "google/gemini-3-pro-preview",
-    "anthropic/claude-sonnet-4.5",
-    "x-ai/grok-4",
-]
-
-CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
-```
-
-## Running the Application
+### 2. Run the Application
 
 **Option 1: Use the start script**
 ```bash
@@ -82,9 +57,21 @@ npm run dev
 
 Then open http://localhost:5173 in your browser.
 
+### 3. Configure in Settings
+
+On first launch, open the Settings panel to configure:
+
+- **OpenRouter API Key** - Required. Get one at [openrouter.ai](https://openrouter.ai/)
+- **Council Models** - Select which LLMs participate in the council
+- **Chairman Model** - The model that synthesizes the final answer
+- **Search Provider** - DuckDuckGo (free), Brave, or Tavily
+- **Full Article Fetch** - Number of search results to fetch full content for (via Jina Reader)
+
+All settings are stored locally in `data/settings.json`.
+
 ## Tech Stack
 
 - **Backend:** FastAPI (Python 3.10+), async httpx, OpenRouter API
 - **Frontend:** React + Vite, react-markdown for rendering
-- **Storage:** JSON files in `data/conversations/`
+- **Storage:** JSON files in `data/`
 - **Package Management:** uv for Python, npm for JavaScript

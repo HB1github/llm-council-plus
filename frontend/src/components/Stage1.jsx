@@ -9,6 +9,9 @@ export default function Stage1({ responses }) {
     return null;
   }
 
+  const currentResponse = responses[activeTab];
+  const hasError = currentResponse?.error;
+
   return (
     <div className="stage stage1">
       <h3 className="stage-title">Stage 1: Individual Responses</h3>
@@ -17,19 +20,35 @@ export default function Stage1({ responses }) {
         {responses.map((resp, index) => (
           <button
             key={index}
-            className={`tab ${activeTab === index ? 'active' : ''}`}
+            className={`tab ${activeTab === index ? 'active' : ''} ${resp.error ? 'tab-error' : ''}`}
             onClick={() => setActiveTab(index)}
+            title={resp.error ? resp.error_message : ''}
           >
+            {resp.error && <span className="error-indicator">!</span>}
             {resp.model.split('/')[1] || resp.model}
           </button>
         ))}
       </div>
 
       <div className="tab-content">
-        <div className="model-name">{responses[activeTab].model}</div>
-        <div className="response-text markdown-content">
-          <ReactMarkdown>{responses[activeTab].response}</ReactMarkdown>
+        <div className="model-name">
+          {currentResponse.model}
+          {hasError && <span className="model-status error">Failed</span>}
+          {!hasError && <span className="model-status success">Success</span>}
         </div>
+        {hasError ? (
+          <div className="response-error">
+            <div className="error-icon">!</div>
+            <div className="error-details">
+              <div className="error-title">Model Failed to Respond</div>
+              <div className="error-message">{currentResponse.error_message}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="response-text markdown-content">
+            <ReactMarkdown>{currentResponse.response}</ReactMarkdown>
+          </div>
+        )}
       </div>
     </div>
   );
