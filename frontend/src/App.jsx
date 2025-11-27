@@ -57,7 +57,7 @@ function App() {
     setCurrentConversationId(id);
   };
 
-  const handleSendMessage = async (content) => {
+  const handleSendMessage = async (content, webSearch) => {
     if (!currentConversationId) return;
 
     setIsLoading(true);
@@ -90,8 +90,16 @@ function App() {
       }));
 
       // Send message with streaming
-      await api.sendMessageStream(currentConversationId, content, (eventType, event) => {
+      await api.sendMessageStream(currentConversationId, content, webSearch, (eventType, event) => {
         switch (eventType) {
+          case 'search_start':
+            // Optional: Show search status if needed, or just let it be part of the loading state
+            break;
+
+          case 'search_complete':
+            // Optional: Store search results if we want to display them
+            break;
+
           case 'stage1_start':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];

@@ -3,19 +3,31 @@
 from typing import List, Dict, Any, Tuple
 from .openrouter import query_models_parallel, query_model
 from .config import COUNCIL_MODELS, CHAIRMAN_MODEL
+from .search import perform_web_search
 
 
-async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
+async def stage1_collect_responses(user_query: str, search_context: str = "") -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses from all council models.
 
     Args:
         user_query: The user's question
+        search_context: Optional web search results to provide context
 
     Returns:
         List of dicts with 'model' and 'response' keys
     """
-    messages = [{"role": "user", "content": user_query}]
+    if search_context:
+        prompt = f"""Use the following search results to answer the question.
+        
+Search Results:
+{search_context}
+
+Question: {user_query}"""
+    else:
+        prompt = user_query
+
+    messages = [{"role": "user", "content": prompt}]
 
     # Query all models in parallel
     responses = await query_models_parallel(COUNCIL_MODELS, messages)
@@ -34,7 +46,8 @@ async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
 
 async def stage2_collect_rankings(
     user_query: str,
-    stage1_results: List[Dict[str, Any]]
+    stage1_results: List[Dict[str, Any]],
+    search_context: str = ""
 ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
     """
     Stage 2: Each model ranks the anonymized responses.
@@ -42,6 +55,7 @@ async def stage2_collect_rankings(
     Args:
         user_query: The original user query
         stage1_results: Results from Stage 1
+        search_context: Optional web search results for fact-checking
 
     Returns:
         Tuple of (rankings list, label_to_model mapping)
@@ -64,7 +78,12 @@ async def stage2_collect_rankings(
     ranking_prompt = f"""You are evaluating different responses to the following question:
 
 Question: {user_query}
+"""
 
+    if search_context:
+        ranking_prompt += f"\nContext from Web Search:\n{search_context}\n"
+
+    ranking_prompt += f"""
 Here are the responses from different models (anonymized):
 
 {responses_text}
@@ -115,7 +134,8 @@ Now provide your evaluation and ranking:"""
 async def stage3_synthesize_final(
     user_query: str,
     stage1_results: List[Dict[str, Any]],
-    stage2_results: List[Dict[str, Any]]
+    stage2_results: List[Dict[str, Any]],
+    search_context: str = ""
 ) -> Dict[str, Any]:
     """
     Stage 3: Chairman synthesizes final response.
@@ -142,7 +162,12 @@ async def stage3_synthesize_final(
     chairman_prompt = f"""You are the Chairman of an LLM Council. Multiple AI models have provided responses to a user's question, and then ranked each other's responses.
 
 Original Question: {user_query}
+"""
 
+    if search_context:
+        chairman_prompt += f"\nContext from Web Search:\n{search_context}\n"
+
+    chairman_prompt += f"""
 STAGE 1 - Individual Responses:
 {stage1_text}
 
@@ -293,18 +318,26 @@ Title:"""
     return title
 
 
-async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
+async def run_full_council(user_query: str, use_web_search: bool = False) -> Tuple[List, List, Dict, Dict]:
     """
     Run the complete 3-stage council process.
 
     Args:
         user_query: The user's question
+        use_web_search: Whether to perform a web search for context
 
     Returns:
         Tuple of (stage1_results, stage2_results, stage3_result, metadata)
     """
+    # Perform web search if requested
+    search_context = ""
+    if use_web_search:
+        # We use the user query directly for search.
+        # In a more advanced version, we might generate a specific search query.
+        search_context = perform_web_search(user_query)
+
     # Stage 1: Collect individual responses
-    stage1_results = await stage1_collect_responses(user_query)
+    stage1_results = await stage1_collect_responses(user_query, search_context)
 
     # If no models responded successfully, return error
     if not stage1_results:
@@ -314,7 +347,7 @@ async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
         }, {}
 
     # Stage 2: Collect rankings
-    stage2_results, label_to_model = await stage2_collect_rankings(user_query, stage1_results)
+    stage2_results, label_to_model = await stage2_collect_rankings(user_query, stage1_results, search_context)
 
     # Calculate aggregate rankings
     aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
@@ -323,13 +356,15 @@ async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
     stage3_result = await stage3_synthesize_final(
         user_query,
         stage1_results,
-        stage2_results
+        stage2_results,
+        search_context
     )
 
     # Prepare metadata
     metadata = {
         "label_to_model": label_to_model,
-        "aggregate_rankings": aggregate_rankings
+        "aggregate_rankings": aggregate_rankings,
+        "search_context": search_context  # Include search context in metadata for debugging/display
     }
 
     return stage1_results, stage2_results, stage3_result, metadata
