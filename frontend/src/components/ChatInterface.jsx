@@ -17,13 +17,25 @@ export default function ChatInterface({
   const [input, setInput] = useState('');
   const [webSearch, setWebSearch] = useState(false);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Only auto-scroll if user is already near the bottom
+  // This prevents interrupting reading when new content arrives
   useEffect(() => {
-    scrollToBottom();
+    if (!messagesContainerRef.current) return;
+
+    const container = messagesContainerRef.current;
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+
+    // Auto-scroll only if user is already at/near bottom
+    if (isNearBottom) {
+      scrollToBottom();
+    }
   }, [conversation]);
 
   const handleSubmit = (e) => {
@@ -55,7 +67,7 @@ export default function ChatInterface({
 
   return (
     <div className="chat-interface">
-      <div className="messages-container">
+      <div className="messages-container" ref={messagesContainerRef}>
         {conversation.messages.length === 0 ? (
           <div className="empty-state">
             <h2>Start a conversation</h2>
@@ -181,40 +193,43 @@ export default function ChatInterface({
         <div ref={messagesEndRef} />
       </div>
 
-      {conversation.messages.length === 0 && (
-        <form className="input-form" onSubmit={handleSubmit}>
-          <div className="input-row">
-            <textarea
-              className="message-input"
-              placeholder="Ask your question... (Shift+Enter for new line, Enter to send)"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isLoading}
-              rows={3}
-            />
-            <div className="input-actions">
-              <button
-                type="button"
-                className={`web-search-button ${webSearch ? 'active' : ''}`}
-                onClick={() => setWebSearch(!webSearch)}
-                disabled={isLoading}
-                title="Toggle Web Search"
-              >
-                <span className="search-icon">🌐</span>
-                {webSearch ? 'Search ON' : 'Search OFF'}
-              </button>
-              <button
-                type="submit"
-                className="send-button"
-                disabled={!input.trim() || isLoading}
-              >
-                Send
-              </button>
-            </div>
+      <form className="input-form" onSubmit={handleSubmit}>
+        {isLoading && (
+          <div className="input-disabled-notice">
+            This app is designed for one query at a time. Please wait for the current query to complete or click "Stop" to cancel it.
           </div>
-        </form>
-      )}
+        )}
+        <div className="input-row">
+          <textarea
+            className="message-input"
+            placeholder="Ask your question... (Shift+Enter for new line, Enter to send)"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isLoading}
+            rows={3}
+          />
+          <div className="input-actions">
+            <button
+              type="button"
+              className={`web-search-button ${webSearch ? 'active' : ''}`}
+              onClick={() => setWebSearch(!webSearch)}
+              disabled={isLoading}
+              title="Toggle Web Search"
+            >
+              <span className="search-icon">🌐</span>
+              {webSearch ? 'Search ON' : 'Search OFF'}
+            </button>
+            <button
+              type="submit"
+              className="send-button"
+              disabled={!input.trim() || isLoading}
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }

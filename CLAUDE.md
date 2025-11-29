@@ -401,10 +401,49 @@ curl http://localhost:11434/api/tags
 - Net: -30 lines (cleaner codebase)
 - 10 bugs fixed, 3 optimizations implemented
 
+### Nov 29 - Settings UI Refactor & Streaming Safety
+**Major Settings UX Overhaul:**
+- Removed provider selector entirely
+- Changed "Hybrid" section to unified "Council Configuration"
+- Added toggles for which model sources are available (OpenRouter, Ollama, Direct Connections)
+- Per-member Remote/Local toggle for each council member
+- Unified council configuration works across all providers
+- Updated descriptions to clarify settings apply to search generator, council members, and chairman
+- Added helper text explaining 8 member limit and batching behavior
+
+**White Screen Crash Fixes (4 iterations):**
+1. **Model ID Format Handling:**
+   - Added `getShortModelName()` helper to Stage1, Stage2, Stage3
+   - Handles both `/` delimiter (e.g., `openai/gpt-4`) and `:` delimiter (e.g., `ollama:llama3`, `anthropic:claude-sonnet-4`)
+   - Returns 'Unknown' for null/undefined model IDs
+
+2. **Backend Error Handling:**
+   - Filter out None responses in Stage 3 synthesis (failed models don't crash synthesis)
+   - Added null checks for prompt templates with fallback to defaults
+   - Enhanced exception handling to catch AttributeError and TypeError
+
+3. **Streaming Bounds Safety:**
+   - Added useEffect in Stage1/Stage2 to auto-adjust activeTab when out of bounds
+   - Added safeActiveTab calculation: `Math.min(activeTab, responses.length - 1)`
+   - Prevents crashes when user clicks tabs during streaming
+
+4. **ReactMarkdown Type Safety:**
+   - Added type checking before passing data to ReactMarkdown
+   - Ensures component always receives strings, not objects
+   - Pattern: `typeof value === 'string' ? value : String(value || 'fallback')`
+
+**Files Modified:**
+- `frontend/src/components/Settings.jsx` - Unified council config, per-member toggles
+- `frontend/src/components/Stage1.jsx` - Model name parsing, bounds checking, type safety
+- `frontend/src/components/Stage2.jsx` - Model name parsing, bounds checking, type safety
+- `frontend/src/components/Stage3.jsx` - Model name parsing, type safety
+- `backend/council.py` - Null filtering, prompt template validation
+
 **Pending Work:**
 - Settings UI refactoring: Decision needed on layout (Sidebar vs. Tabs) to reduce scrolling
 - Optional optimizations: Settings state simplification, request caching
 - Testing: See `BUGS_AND_OPTIMIZATIONS.md` for comprehensive test checklist
+- ReactMarkdown still throwing errors during streaming (investigation ongoing)
 
 ## AI Coding Best Practices (Lessons Learned)
 

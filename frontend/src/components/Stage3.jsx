@@ -2,6 +2,18 @@ import ReactMarkdown from 'react-markdown';
 import './Stage3.css';
 import StageTimer from './StageTimer';
 
+function getShortModelName(modelId) {
+  if (!modelId) return 'Unknown';
+
+  let displayName = modelId;
+  if (modelId.includes('/')) {
+    displayName = modelId.split('/')[1] || modelId;
+  } else if (modelId.includes(':')) {
+    displayName = modelId.split(':')[1] || modelId;
+  }
+  return displayName;
+}
+
 export default function Stage3({ finalResponse, startTime, endTime }) {
   if (!finalResponse) {
     return null;
@@ -15,10 +27,14 @@ export default function Stage3({ finalResponse, startTime, endTime }) {
       </div>
       <div className="final-response">
         <div className="chairman-label">
-          Chairman: {finalResponse.model.split('/')[1] || finalResponse.model}
+          Chairman: {getShortModelName(finalResponse?.model)}
         </div>
         <div className="final-text markdown-content">
-          <ReactMarkdown>{finalResponse.response}</ReactMarkdown>
+          <ReactMarkdown>
+            {typeof finalResponse?.response === 'string'
+              ? finalResponse.response
+              : String(finalResponse?.response || 'No response')}
+          </ReactMarkdown>
         </div>
       </div>
     </div>

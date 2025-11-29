@@ -5,6 +5,11 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
+  position: relative;
+}
+
+.sidebar.disabled {
+  pointer-events: none;
 }
 
 .sidebar-header {
@@ -191,4 +196,52 @@
 
 .modal-btn:hover {
   opacity: 0.9;
+}
+
+/* Sidebar Overlay when query is running */
+.sidebar-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: all;
+}
+
+.sidebar-overlay-content {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  text-align: center;
+  max-width: 200px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.sidebar-overlay-content p {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #333;
+}
+
+.sidebar-stop-btn {
+  padding: 10px 24px;
+  background: #d32f2f;
+  border: 1px solid #d32f2f;
+  border-radius: 6px;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sidebar-stop-btn:hover {
+  background: #c62828;
+  border-color: #c62828;
 }

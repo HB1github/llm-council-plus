@@ -5,7 +5,7 @@ import asyncio
 import logging
 from . import openrouter
 from . import ollama_client
-from .config import get_council_models, get_chairman_model, get_llm_provider
+from .config import get_council_models, get_chairman_model
 from .search import perform_web_search, SearchProvider
 from .settings import get_settings
 
@@ -37,15 +37,8 @@ def get_provider_for_model(model_id: str) -> Any:
         provider_name = model_id.split(":")[0]
         if provider_name in PROVIDERS:
             return PROVIDERS[provider_name]
-    
-    # Fallback logic for legacy/unprefixed IDs
-    settings = get_settings()
-    if settings.llm_provider == "ollama":
-        return PROVIDERS["ollama"]
-    elif settings.llm_provider == "openrouter":
-        return PROVIDERS["openrouter"]
-        
-    # Default to OpenRouter for unknown
+
+    # Default to OpenRouter for unprefixed models (legacy support)
     return PROVIDERS["openrouter"]
 
 
@@ -219,12 +212,18 @@ async def stage2_collect_rankings(
         search_context_block = f"Context from Web Search:\n{search_context}\n"
 
     try:
-        ranking_prompt = settings.stage2_prompt.format(
+        # Ensure prompt is not None
+        prompt_template = settings.stage2_prompt
+        if not prompt_template:
+            from .prompts import STAGE2_PROMPT_DEFAULT
+            prompt_template = STAGE2_PROMPT_DEFAULT
+
+        ranking_prompt = prompt_template.format(
             user_query=user_query,
             responses_text=responses_text,
             search_context_block=search_context_block
         )
-    except KeyError as e:
+    except (KeyError, AttributeError, TypeError) as e:
         logger.warning(f"Error formatting Stage 2 prompt: {e}. Using fallback.")
         ranking_prompt = f"Question: {user_query}\n\n{responses_text}\n\nRank these responses."
 
@@ -316,15 +315,17 @@ async def stage3_synthesize_final(
     """
     settings = get_settings()
 
-    # Build comprehensive context for chairman
+    # Build comprehensive context for chairman (only include successful responses)
     stage1_text = "\n\n".join([
-        f"Model: {result['model']}\nResponse: {result['response']}"
+        f"Model: {result['model']}\nResponse: {result.get('response', 'No response')}"
         for result in stage1_results
+        if result.get('response') is not None
     ])
 
     stage2_text = "\n\n".join([
-        f"Model: {result['model']}\nRanking: {result['ranking']}"
+        f"Model: {result['model']}\nRanking: {result.get('ranking', 'No ranking')}"
         for result in stage2_results
+        if result.get('ranking') is not None
     ])
 
     search_context_block = ""
@@ -332,13 +333,19 @@ async def stage3_synthesize_final(
         search_context_block = f"Context from Web Search:\n{search_context}\n"
 
     try:
-        chairman_prompt = settings.stage3_prompt.format(
+        # Ensure prompt is not None
+        prompt_template = settings.stage3_prompt
+        if not prompt_template:
+            from .prompts import STAGE3_PROMPT_DEFAULT
+            prompt_template = STAGE3_PROMPT_DEFAULT
+
+        chairman_prompt = prompt_template.format(
             user_query=user_query,
             stage1_text=stage1_text,
             stage2_text=stage2_text,
             search_context_block=search_context_block
         )
-    except KeyError as e:
+    except (KeyError, AttributeError, TypeError) as e:
         logger.warning(f"Error formatting Stage 3 prompt: {e}. Using fallback.")
         chairman_prompt = f"Question: {user_query}\n\nSynthesis required."
 
@@ -502,8 +509,14 @@ async def generate_search_query(user_query: str) -> str:
     """
     settings = get_settings()
     try:
-        prompt = settings.search_query_prompt.format(user_query=user_query)
-    except KeyError:
+        # Ensure prompt is not None
+        prompt_template = settings.search_query_prompt
+        if not prompt_template:
+            from .prompts import SEARCH_QUERY_PROMPT_DEFAULT
+            prompt_template = SEARCH_QUERY_PROMPT_DEFAULT
+
+        prompt = prompt_template.format(user_query=user_query)
+    except (KeyError, AttributeError, TypeError):
         prompt = f"Search terms for: {user_query}"
 
     messages = [{"role": "user", "content": prompt}]

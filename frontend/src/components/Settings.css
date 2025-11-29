@@ -743,7 +743,11 @@
 
 /* Chairman Selection Styles */
 .chairman-selection {
-  margin-top: 8px;
+  /* Removed margin-top since we handle it in parent now */
+}
+
+.chairman-selection .model-select {
+  width: 100%;
 }
 
 .chairman-select {
@@ -908,7 +912,7 @@ input:checked+.slider {
 }
 
 /* Custom color for Direct Connection sub-toggles */
-.direct-grid input:checked+.slider {
+.direct-toggle input:checked+.slider {
   background-color: #7B61FF;
   /* Distinct Purple */
 }

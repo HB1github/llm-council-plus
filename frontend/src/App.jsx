@@ -186,7 +186,16 @@ function App() {
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.search = true;
+
+              const updatedLastMsg = {
+                ...lastMsg,
+                loading: {
+                  ...lastMsg.loading,
+                  search: true
+                }
+              };
+
+              messages[messages.length - 1] = updatedLastMsg;
               return { ...prev, messages };
             });
             break;
@@ -195,13 +204,21 @@ function App() {
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.search = false;
-              // Set metadata with search results immediately
-              lastMsg.metadata = {
-                ...lastMsg.metadata,
-                search_query: event.data.search_query,
-                search_context: event.data.search_context,
+
+              const updatedLastMsg = {
+                ...lastMsg,
+                loading: {
+                  ...lastMsg.loading,
+                  search: false
+                },
+                metadata: {
+                  ...lastMsg.metadata,
+                  search_query: event.data.search_query,
+                  search_context: event.data.search_context,
+                }
               };
+
+              messages[messages.length - 1] = updatedLastMsg;
               return { ...prev, messages };
             });
             break;
@@ -210,8 +227,20 @@ function App() {
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.stage1 = true;
-              lastMsg.timers.stage1Start = Date.now();
+
+              const updatedLastMsg = {
+                ...lastMsg,
+                loading: {
+                  ...lastMsg.loading,
+                  stage1: true
+                },
+                timers: {
+                  ...lastMsg.timers,
+                  stage1Start: Date.now()
+                }
+              };
+
+              messages[messages.length - 1] = updatedLastMsg;
               return { ...prev, messages };
             });
             break;
@@ -221,11 +250,20 @@ function App() {
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
-              lastMsg.progress.stage1 = {
-                count: 0,
-                total: event.total,
-                currentModel: null
+
+              const updatedLastMsg = {
+                ...lastMsg,
+                progress: {
+                  ...lastMsg.progress,
+                  stage1: {
+                    count: 0,
+                    total: event.total,
+                    currentModel: null
+                  }
+                }
               };
+
+              messages[messages.length - 1] = updatedLastMsg;
               return { ...prev, messages };
             });
             break;
@@ -260,9 +298,22 @@ function App() {
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
-              lastMsg.stage1 = event.data;
-              lastMsg.loading.stage1 = false;
-              lastMsg.timers.stage1End = Date.now();
+
+              // Immutable update to prevent React rendering issues
+              const updatedLastMsg = {
+                ...lastMsg,
+                stage1: event.data,
+                loading: {
+                  ...lastMsg.loading,
+                  stage1: false
+                },
+                timers: {
+                  ...lastMsg.timers,
+                  stage1End: Date.now()
+                }
+              };
+
+              messages[messages.length - 1] = updatedLastMsg;
               return { ...prev, messages };
             });
             break;
@@ -271,8 +322,20 @@ function App() {
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.stage2 = true;
-              lastMsg.timers.stage2Start = Date.now();
+
+              const updatedLastMsg = {
+                ...lastMsg,
+                loading: {
+                  ...lastMsg.loading,
+                  stage2: true
+                },
+                timers: {
+                  ...lastMsg.timers,
+                  stage2Start: Date.now()
+                }
+              };
+
+              messages[messages.length - 1] = updatedLastMsg;
               return { ...prev, messages };
             });
             break;
@@ -281,11 +344,20 @@ function App() {
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
-              lastMsg.progress.stage2 = {
-                count: 0,
-                total: event.total,
-                currentModel: null
+
+              const updatedLastMsg = {
+                ...lastMsg,
+                progress: {
+                  ...lastMsg.progress,
+                  stage2: {
+                    count: 0,
+                    total: event.total,
+                    currentModel: null
+                  }
+                }
               };
+
+              messages[messages.length - 1] = updatedLastMsg;
               return { ...prev, messages };
             });
             break;
@@ -320,14 +392,26 @@ function App() {
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
-              // Ensure we have the full final list (though we might have built it incrementally)
-              lastMsg.stage2 = event.data;
-              lastMsg.loading.stage2 = false;
-              lastMsg.timers.stage2End = Date.now();
-              lastMsg.metadata = {
-                ...lastMsg.metadata,
-                ...event.metadata
+
+              // Immutable update to prevent React rendering issues
+              const updatedLastMsg = {
+                ...lastMsg,
+                stage2: event.data,
+                loading: {
+                  ...lastMsg.loading,
+                  stage2: false
+                },
+                timers: {
+                  ...lastMsg.timers,
+                  stage2End: Date.now()
+                },
+                metadata: {
+                  ...lastMsg.metadata,
+                  ...event.metadata
+                }
               };
+
+              messages[messages.length - 1] = updatedLastMsg;
               return { ...prev, messages };
             });
             break;
@@ -336,8 +420,20 @@ function App() {
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.stage3 = true;
-              lastMsg.timers.stage3Start = Date.now();
+
+              const updatedLastMsg = {
+                ...lastMsg,
+                loading: {
+                  ...lastMsg.loading,
+                  stage3: true
+                },
+                timers: {
+                  ...lastMsg.timers,
+                  stage3Start: Date.now()
+                }
+              };
+
+              messages[messages.length - 1] = updatedLastMsg;
               return { ...prev, messages };
             });
             break;
@@ -346,9 +442,22 @@ function App() {
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
-              lastMsg.stage3 = event.data;
-              lastMsg.loading.stage3 = false;
-              lastMsg.timers.stage3End = Date.now();
+
+              // Immutable update to prevent React rendering issues
+              const updatedLastMsg = {
+                ...lastMsg,
+                stage3: event.data,
+                loading: {
+                  ...lastMsg.loading,
+                  stage3: false
+                },
+                timers: {
+                  ...lastMsg.timers,
+                  stage3End: Date.now()
+                }
+              };
+
+              messages[messages.length - 1] = updatedLastMsg;
               return { ...prev, messages };
             });
             // Hide loading indicator once final answer is shown
@@ -408,6 +517,8 @@ function App() {
         onNewConversation={handleNewConversation}
         onDeleteConversation={handleDeleteConversation}
         onOpenSettings={() => setShowSettings(true)}
+        isLoading={isLoading}
+        onAbort={handleAbort}
       />
       <ChatInterface
         conversation={currentConversation}

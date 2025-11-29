@@ -286,39 +286,35 @@ async def send_message_stream(conversation_id: str, body: SendMessageRequest, re
 class UpdateSettingsRequest(BaseModel):
     """Request to update settings."""
     search_provider: Optional[str] = None
-    llm_provider: Optional[str] = None
     ollama_base_url: Optional[str] = None
-    ollama_council_models: Optional[List[str]] = None
-    ollama_chairman_model: Optional[str] = None
-    hybrid_council_models: Optional[List[str]] = None
-    hybrid_chairman_model: Optional[str] = None
     full_content_results: Optional[int] = None
+
+    # API Keys
     tavily_api_key: Optional[str] = None
     brave_api_key: Optional[str] = None
     openrouter_api_key: Optional[str] = None
-    council_models: Optional[List[str]] = None
-    chairman_model: Optional[str] = None
-    
-    # Utility Models
-    search_query_model: Optional[str] = None
-    title_model: Optional[str] = None
-    
-    # System Prompts
-    stage1_prompt: Optional[str] = None
-    stage2_prompt: Optional[str] = None
-    stage3_prompt: Optional[str] = None
-    title_prompt: Optional[str] = None
-    search_query_prompt: Optional[str] = None
-    
-    # Direct Provider Keys
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     google_api_key: Optional[str] = None
     mistral_api_key: Optional[str] = None
     deepseek_api_key: Optional[str] = None
-    
-    direct_council_models: Optional[List[str]] = None
-    direct_chairman_model: Optional[str] = None
+
+    # Enabled Providers
+    enabled_providers: Optional[Dict[str, bool]] = None
+    direct_provider_toggles: Optional[Dict[str, bool]] = None
+
+    # Council Configuration (unified)
+    council_models: Optional[List[str]] = None
+    chairman_model: Optional[str] = None
+
+    # Web Search Query Generator
+    search_query_model: Optional[str] = None
+
+    # System Prompts
+    stage1_prompt: Optional[str] = None
+    stage2_prompt: Optional[str] = None
+    stage3_prompt: Optional[str] = None
+    search_query_prompt: Optional[str] = None
 
 
 
@@ -333,36 +329,35 @@ async def get_app_settings():
     settings = get_settings()
     return {
         "search_provider": settings.search_provider,
-        "llm_provider": settings.llm_provider,
         "ollama_base_url": settings.ollama_base_url,
-        "ollama_council_models": settings.ollama_council_models,
-        "ollama_chairman_model": settings.ollama_chairman_model,
-        "hybrid_council_models": settings.hybrid_council_models,
-        "hybrid_chairman_model": settings.hybrid_chairman_model,
         "full_content_results": settings.full_content_results,
+
+        # API Key Status
         "tavily_api_key_set": bool(settings.tavily_api_key),
         "brave_api_key_set": bool(settings.brave_api_key),
         "openrouter_api_key_set": bool(settings.openrouter_api_key),
-        "council_models": settings.council_models,
-        "chairman_model": settings.chairman_model,
-        # Utility Models
-        "search_query_model": settings.search_query_model,
-        # Prompts
-        "stage1_prompt": settings.stage1_prompt,
-        "stage2_prompt": settings.stage2_prompt,
-        "stage3_prompt": settings.stage3_prompt,
-        "search_query_prompt": settings.search_query_prompt,
-        "search_query_prompt": settings.search_query_prompt,
-        
-        # Direct Provider Keys Set Status
         "openai_api_key_set": bool(settings.openai_api_key),
         "anthropic_api_key_set": bool(settings.anthropic_api_key),
         "google_api_key_set": bool(settings.google_api_key),
         "mistral_api_key_set": bool(settings.mistral_api_key),
         "deepseek_api_key_set": bool(settings.deepseek_api_key),
-        
-        "direct_council_models": settings.direct_council_models,
-        "direct_chairman_model": settings.direct_chairman_model,
+
+        # Enabled Providers
+        "enabled_providers": settings.enabled_providers,
+        "direct_provider_toggles": settings.direct_provider_toggles,
+
+        # Council Configuration (unified)
+        "council_models": settings.council_models,
+        "chairman_model": settings.chairman_model,
+
+        # Web Search Query Generator
+        "search_query_model": settings.search_query_model,
+
+        # Prompts
+        "stage1_prompt": settings.stage1_prompt,
+        "stage2_prompt": settings.stage2_prompt,
+        "stage3_prompt": settings.stage3_prompt,
+        "search_query_prompt": settings.search_query_prompt,
     }
 
 
@@ -406,42 +401,8 @@ async def update_app_settings(request: UpdateSettingsRequest):
                 detail=f"Invalid search provider. Must be one of: {[p.value for p in SearchProvider]}"
             )
 
-    if request.llm_provider is not None:
-        updates["llm_provider"] = request.llm_provider
     if request.ollama_base_url is not None:
         updates["ollama_base_url"] = request.ollama_base_url
-        
-    if request.ollama_council_models is not None:
-        if len(request.ollama_council_models) < 2:
-             raise HTTPException(
-                status_code=400,
-                detail="At least two council models must be selected for Ollama"
-            )
-        if len(request.ollama_council_models) > 8:
-             raise HTTPException(
-                status_code=400,
-                detail="Maximum of 8 council models allowed"
-            )
-        updates["ollama_council_models"] = request.ollama_council_models
-        
-    if request.ollama_chairman_model is not None:
-        updates["ollama_chairman_model"] = request.ollama_chairman_model
-
-    if request.hybrid_council_models is not None:
-        if len(request.hybrid_council_models) < 2:
-             raise HTTPException(
-                status_code=400,
-                detail="At least two council models must be selected for Hybrid mode"
-            )
-        if len(request.hybrid_council_models) > 8:
-             raise HTTPException(
-                status_code=400,
-                detail="Maximum of 8 council models allowed"
-            )
-        updates["hybrid_council_models"] = request.hybrid_council_models
-
-    if request.hybrid_chairman_model is not None:
-        updates["hybrid_chairman_model"] = request.hybrid_chairman_model
 
     if request.full_content_results is not None:
         # Validate range
@@ -459,8 +420,6 @@ async def update_app_settings(request: UpdateSettingsRequest):
         updates["stage2_prompt"] = request.stage2_prompt
     if request.stage3_prompt is not None:
         updates["stage3_prompt"] = request.stage3_prompt
-    if request.title_prompt is not None:
-        updates["title_prompt"] = request.title_prompt
     if request.search_query_prompt is not None:
         updates["search_query_prompt"] = request.search_query_prompt
 
@@ -490,12 +449,15 @@ async def update_app_settings(request: UpdateSettingsRequest):
         updates["mistral_api_key"] = request.mistral_api_key
     if request.deepseek_api_key is not None:
         updates["deepseek_api_key"] = request.deepseek_api_key
-        
-    if request.direct_council_models is not None:
-        updates["direct_council_models"] = request.direct_council_models
-    if request.direct_chairman_model is not None:
-        updates["direct_chairman_model"] = request.direct_chairman_model
 
+    # Enabled Providers
+    if request.enabled_providers is not None:
+        updates["enabled_providers"] = request.enabled_providers
+
+    if request.direct_provider_toggles is not None:
+        updates["direct_provider_toggles"] = request.direct_provider_toggles
+
+    # Council Configuration (unified)
     if request.council_models is not None:
         # Validate that at least two models are selected
         if len(request.council_models) < 2:
@@ -513,11 +475,9 @@ async def update_app_settings(request: UpdateSettingsRequest):
     if request.chairman_model is not None:
         updates["chairman_model"] = request.chairman_model
 
+    # Web Search Query Generator
     if request.search_query_model is not None:
         updates["search_query_model"] = request.search_query_model
-
-    if request.title_model is not None:
-        updates["title_model"] = request.title_model
 
     if updates:
         settings = update_settings(**updates)
@@ -526,10 +486,10 @@ async def update_app_settings(request: UpdateSettingsRequest):
 
     return {
         "search_provider": settings.search_provider,
-        "llm_provider": settings.llm_provider,
         "ollama_base_url": settings.ollama_base_url,
-        "ollama_council_models": settings.ollama_council_models,
-        "ollama_chairman_model": settings.ollama_chairman_model,
+        "full_content_results": settings.full_content_results,
+
+        # API Key Status
         "tavily_api_key_set": bool(settings.tavily_api_key),
         "brave_api_key_set": bool(settings.brave_api_key),
         "openrouter_api_key_set": bool(settings.openrouter_api_key),
@@ -538,8 +498,23 @@ async def update_app_settings(request: UpdateSettingsRequest):
         "google_api_key_set": bool(settings.google_api_key),
         "mistral_api_key_set": bool(settings.mistral_api_key),
         "deepseek_api_key_set": bool(settings.deepseek_api_key),
+
+        # Enabled Providers
+        "enabled_providers": settings.enabled_providers,
+        "direct_provider_toggles": settings.direct_provider_toggles,
+
+        # Council Configuration (unified)
         "council_models": settings.council_models,
         "chairman_model": settings.chairman_model,
+
+        # Web Search Query Generator
+        "search_query_model": settings.search_query_model,
+
+        # Prompts
+        "stage1_prompt": settings.stage1_prompt,
+        "stage2_prompt": settings.stage2_prompt,
+        "stage3_prompt": settings.stage3_prompt,
+        "search_query_prompt": settings.search_query_prompt,
     }
 
 

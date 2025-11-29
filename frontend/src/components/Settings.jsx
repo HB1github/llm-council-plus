@@ -26,13 +26,6 @@ const SEARCH_PROVIDERS = [
   },
 ];
 
-const LLM_PROVIDERS = [
-  { id: 'openrouter', name: 'OpenRouter', description: 'Use cloud-based models' },
-  { id: 'ollama', name: 'Ollama', description: 'Use local models' },
-  { id: 'direct', name: 'Direct', description: 'Use your own API keys' },
-  { id: 'hybrid', name: 'Hybrid', description: 'Mix cloud and local models' }
-];
-
 const DIRECT_PROVIDERS = [
   { id: 'openai', name: 'OpenAI', key: 'openai_api_key' },
   { id: 'anthropic', name: 'Anthropic', key: 'anthropic_api_key' },
@@ -46,28 +39,17 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
   const [selectedSearchProvider, setSelectedSearchProvider] = useState('duckduckgo');
   const [fullContentResults, setFullContentResults] = useState(3);
 
-  // LLM Provider State
-  const [selectedLlmProvider, setSelectedLlmProvider] = useState('openrouter');
-
   // OpenRouter State
   const [openrouterApiKey, setOpenrouterApiKey] = useState('');
-  const [councilModels, setCouncilModels] = useState([]);
-  const [chairmanModel, setChairmanModel] = useState('');
   const [availableModels, setAvailableModels] = useState([]);
   const [isTestingOpenRouter, setIsTestingOpenRouter] = useState(false);
   const [openrouterTestResult, setOpenrouterTestResult] = useState(null);
 
   // Ollama State
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState('http://localhost:11434');
-  const [ollamaCouncilModels, setOllamaCouncilModels] = useState([]);
-  const [ollamaChairmanModel, setOllamaChairmanModel] = useState('');
   const [ollamaAvailableModels, setOllamaAvailableModels] = useState([]);
   const [isTestingOllama, setIsTestingOllama] = useState(false);
   const [ollamaTestResult, setOllamaTestResult] = useState(null);
-
-  // Hybrid State
-  const [hybridCouncilModels, setHybridCouncilModels] = useState([]);
-  const [hybridChairmanModel, setHybridChairmanModel] = useState('');
 
   // Direct Provider State
   const [directKeys, setDirectKeys] = useState({
@@ -77,17 +59,11 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
     mistral_api_key: '',
     deepseek_api_key: ''
   });
-  const [directCouncilModels, setDirectCouncilModels] = useState([]);
-  const [directChairmanModel, setDirectChairmanModel] = useState('');
   const [directAvailableModels, setDirectAvailableModels] = useState([]);
 
   // Validation State
   const [validatingKeys, setValidatingKeys] = useState({});
   const [keyValidationStatus, setKeyValidationStatus] = useState({});
-
-  // Track filter preference for Hybrid mode rows (index -> 'remote' | 'local')
-  // We initialize this lazily during render or effects
-  const [hybridRowFilters, setHybridRowFilters] = useState({});
 
   // Search API Keys
   const [tavilyApiKey, setTavilyApiKey] = useState('');
@@ -98,19 +74,27 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
   const [braveTestResult, setBraveTestResult] = useState(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  // Hybrid Mode Filters
-  const [hybridShowOpenRouter, setHybridShowOpenRouter] = useState(true);
-  const [hybridShowLocal, setHybridShowLocal] = useState(true);
-  const [hybridShowDirect, setHybridShowDirect] = useState(true);
-  const [hybridDirectProviders, setHybridDirectProviders] = useState({
-    openai: true,
-    anthropic: true,
-    google: true,
-    mistral: true,
-    deepseek: true
+  // Enabled Providers (which sources are available)
+  const [enabledProviders, setEnabledProviders] = useState({
+    openrouter: true,
+    ollama: false,
+    direct: false  // Master toggle for all direct connections
   });
 
-  // Utility Models State
+  // Individual direct provider toggles
+  const [directProviderToggles, setDirectProviderToggles] = useState({
+    openai: false,
+    anthropic: false,
+    google: false,
+    mistral: false,
+    deepseek: false
+  });
+
+  // Council Configuration (unified across all providers)
+  const [councilModels, setCouncilModels] = useState([]);
+  const [chairmanModel, setChairmanModel] = useState('');
+
+  // Web Search Query Generator
   const [searchQueryModel, setSearchQueryModel] = useState('');
 
   // System Prompts State
@@ -130,6 +114,11 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
   const [success, setSuccess] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
+  // Remote/Local filter toggles per model type
+  const [searchQueryFilter, setSearchQueryFilter] = useState('remote');  // 'remote' or 'local'
+  const [councilMemberFilters, setCouncilMemberFilters] = useState({});  // Per-member filters (indexed by member index)
+  const [chairmanFilter, setChairmanFilter] = useState('remote');
+
   useEffect(() => {
     loadSettings();
   }, []);
@@ -141,38 +130,25 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
     const checkChanges = () => {
       if (selectedSearchProvider !== settings.search_provider) return true;
       if (fullContentResults !== (settings.full_content_results ?? 3)) return true;
-      if (selectedLlmProvider !== settings.llm_provider) return true;
 
-      // OpenRouter
-      // Note: openrouterApiKey is auto-saved on test, so we don't check it here
+      // Enabled Providers
+      if (JSON.stringify(enabledProviders) !== JSON.stringify(settings.enabled_providers)) return true;
+      if (JSON.stringify(directProviderToggles) !== JSON.stringify(settings.direct_provider_toggles)) return true;
+
+      // Council Configuration (unified)
       if (JSON.stringify(councilModels) !== JSON.stringify(settings.council_models)) return true;
       if (chairmanModel !== settings.chairman_model) return true;
 
-      // Ollama
-      // Note: ollamaBaseUrl is auto-saved on connect, so we don't check it here
-      if (JSON.stringify(ollamaCouncilModels) !== JSON.stringify(settings.ollama_council_models)) return true;
-      if (ollamaChairmanModel !== settings.ollama_chairman_model) return true;
-
-      // Direct
-      if (JSON.stringify(directCouncilModels) !== JSON.stringify(settings.direct_council_models)) return true;
-      if (directChairmanModel !== settings.direct_chairman_model) return true;
-      // Note: directKeys are auto-saved on test, so we don't check them here
-
-      // Hybrid
-      if (JSON.stringify(hybridCouncilModels) !== JSON.stringify(settings.hybrid_council_models)) return true;
-      if (hybridChairmanModel !== settings.hybrid_chairman_model) return true;
-
-      // Utility
+      // Web Search Query Generator
       if (searchQueryModel !== settings.search_query_model) return true;
 
       // Prompts
       if (prompts.stage1_prompt !== settings.stage1_prompt) return true;
       if (prompts.stage2_prompt !== settings.stage2_prompt) return true;
       if (prompts.stage3_prompt !== settings.stage3_prompt) return true;
-      if (prompts.title_prompt !== settings.title_prompt) return true;
       if (prompts.search_query_prompt !== settings.search_query_prompt) return true;
 
-      // Note: API keys (tavilyApiKey, braveApiKey) are auto-saved on test, so we don't check them here
+      // Note: API keys are auto-saved on test, so we don't check them here
 
       return false;
     };
@@ -182,15 +158,10 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
     settings,
     selectedSearchProvider,
     fullContentResults,
-    selectedLlmProvider,
+    enabledProviders,
+    directProviderToggles,
     councilModels,
     chairmanModel,
-    ollamaCouncilModels,
-    ollamaChairmanModel,
-    directCouncilModels,
-    directChairmanModel,
-    hybridCouncilModels,
-    hybridChairmanModel,
     searchQueryModel,
     prompts
   ]);
@@ -203,30 +174,44 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
       setSelectedSearchProvider(data.search_provider || 'duckduckgo');
       setFullContentResults(data.full_content_results ?? 3);
 
-      setSelectedLlmProvider(data.llm_provider || 'openrouter');
+      // Enabled Providers - auto-enable any configured providers
+      const hasDirectConfigured = !!(data.openai_api_key_set || data.anthropic_api_key_set ||
+        data.google_api_key_set || data.mistral_api_key_set || data.deepseek_api_key_set);
 
+      setEnabledProviders({
+        openrouter: !!data.openrouter_api_key_set || (!hasDirectConfigured && !ollamaStatus?.connected),
+        ollama: ollamaStatus?.connected || false,
+        direct: hasDirectConfigured
+      });
+
+      // Individual direct provider toggles
+      setDirectProviderToggles({
+        openai: !!data.openai_api_key_set,
+        anthropic: !!data.anthropic_api_key_set,
+        google: !!data.google_api_key_set,
+        mistral: !!data.mistral_api_key_set,
+        deepseek: !!data.deepseek_api_key_set
+      });
+
+      // Council Configuration (unified)
       setCouncilModels(data.council_models || []);
       setChairmanModel(data.chairman_model || '');
 
-      setOllamaBaseUrl(data.ollama_base_url || 'http://localhost:11434');
-      setOllamaCouncilModels(data.ollama_council_models || []);
-      setOllamaChairmanModel(data.ollama_chairman_model || '');
-
-      setHybridCouncilModels(data.hybrid_council_models || []);
-      setHybridChairmanModel(data.hybrid_chairman_model || '');
-
+      // Web Search Query Generator
       setSearchQueryModel(data.search_query_model || 'google/gemini-2.5-flash');
 
+      // Ollama Settings
+      setOllamaBaseUrl(data.ollama_base_url || 'http://localhost:11434');
+
+      // Prompts
       setPrompts({
         stage1_prompt: data.stage1_prompt || '',
         stage2_prompt: data.stage2_prompt || '',
         stage3_prompt: data.stage3_prompt || '',
-        title_prompt: data.title_prompt || '',
         search_query_prompt: data.search_query_prompt || ''
       });
 
-      // Load Direct Keys
-      // Load Direct Keys
+      // Clear Direct Keys (for security)
       setDirectKeys({
         openai_api_key: '',
         anthropic_api_key: '',
@@ -234,12 +219,9 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
         mistral_api_key: '',
         deepseek_api_key: ''
       });
-      setDirectCouncilModels(data.direct_council_models || []);
-      setDirectChairmanModel(data.direct_chairman_model || '');
 
-      // Load OpenRouter models
+      // Load available models from all sources
       loadModels();
-      // Load Ollama models
       loadOllamaModels(data.ollama_base_url || 'http://localhost:11434');
 
     } catch (err) {
@@ -287,48 +269,6 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
     }
   };
 
-  // Auto-populate Ollama defaults if empty and models are available
-  useEffect(() => {
-    if (selectedLlmProvider === 'ollama' && ollamaAvailableModels.length > 0) {
-      // Only populate if completely empty
-      if (ollamaCouncilModels.length === 0) {
-        const count = Math.min(ollamaAvailableModels.length, 4);
-        setOllamaCouncilModels(ollamaAvailableModels.slice(0, count).map(m => m.id));
-      }
-      if (!ollamaChairmanModel) {
-        setOllamaChairmanModel(ollamaAvailableModels[0].id);
-      }
-    }
-  }, [selectedLlmProvider, ollamaAvailableModels]);
-
-  // Auto-populate Hybrid defaults if empty
-  useEffect(() => {
-    if (selectedLlmProvider === 'hybrid' && hybridCouncilModels.length === 0) {
-      // Default to the standard OpenRouter council if available
-      // We can't easily access the 'defaults' from API here without a call, 
-      // but we can use the 'councilModels' state if it's populated (which comes from defaults usually)
-      // Or better, just wait for user to hit Reset, OR populate with available OpenRouter models
-      if (councilModels.length > 0) {
-        setHybridCouncilModels(councilModels);
-      } else if (availableModels.length >= 4) {
-        // Fallback if councilModels not ready
-        setHybridCouncilModels(availableModels.slice(0, 4).map(m => m.id));
-      }
-
-      if (!hybridChairmanModel && chairmanModel) {
-        setHybridChairmanModel(chairmanModel);
-      }
-    }
-  }, [selectedLlmProvider, councilModels, availableModels]);
-
-  // Clear Utility Models if invalid for current provider (e.g. Ollama selected but provider is Direct)
-  useEffect(() => {
-    if (selectedLlmProvider === 'direct') {
-      if (searchQueryModel.startsWith('ollama:')) {
-        setSearchQueryModel('');
-      }
-    }
-  }, [selectedLlmProvider, searchQueryModel]);
 
   const handleTestTavily = async () => {
     if (!tavilyApiKey) {
@@ -346,10 +286,8 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
         await api.updateSettings({ tavily_api_key: tavilyApiKey });
         setTavilyApiKey(''); // Clear input after save
 
-        // Reload settings but preserve current UI selections
-        const currentProvider = selectedLlmProvider;
+        // Reload settings
         await loadSettings();
-        setSelectedLlmProvider(currentProvider);
 
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
@@ -377,10 +315,8 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
         await api.updateSettings({ brave_api_key: braveApiKey });
         setBraveApiKey(''); // Clear input after save
 
-        // Reload settings but preserve current UI selections
-        const currentProvider = selectedLlmProvider;
+        // Reload settings
         await loadSettings();
-        setSelectedLlmProvider(currentProvider);
 
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
@@ -410,10 +346,8 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
         await api.updateSettings({ openrouter_api_key: openrouterApiKey });
         setOpenrouterApiKey(''); // Clear input after save
 
-        // Reload settings but preserve current UI selections
-        const currentProvider = selectedLlmProvider;
+        // Reload settings
         await loadSettings();
-        setSelectedLlmProvider(currentProvider);
 
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
@@ -441,10 +375,8 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
         // Auto-save base URL if connection succeeds
         await api.updateSettings({ ollama_base_url: ollamaBaseUrl });
 
-        // Reload settings but preserve current UI selections
-        const currentProvider = selectedLlmProvider;
+        // Reload settings
         await loadSettings();
-        setSelectedLlmProvider(currentProvider);
 
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
@@ -462,75 +394,60 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
   };
 
   const handleCouncilModelChange = (index, modelId) => {
-    if (selectedLlmProvider === 'openrouter') {
-      setCouncilModels(prev => {
-        const updated = [...prev];
-        updated[index] = modelId;
-        return updated;
-      });
-    } else if (selectedLlmProvider === 'ollama') {
-      setOllamaCouncilModels(prev => {
-        const updated = [...prev];
-        updated[index] = modelId;
-        return updated;
-      });
-    } else if (selectedLlmProvider === 'direct') {
-      setDirectCouncilModels(prev => {
-        const updated = [...prev];
-        updated[index] = modelId;
-        return updated;
-      });
-    } else {
-      setHybridCouncilModels(prev => {
-        const updated = [...prev];
-        updated[index] = modelId;
-        return updated;
-      });
-    }
+    setCouncilModels(prev => {
+      const updated = [...prev];
+      updated[index] = modelId;
+      return updated;
+    });
+  };
+
+  const getMemberFilter = (index) => {
+    return councilMemberFilters[index] || 'remote';
+  };
+
+  const handleMemberFilterChange = (index, filter) => {
+    setCouncilMemberFilters(prev => ({
+      ...prev,
+      [index]: filter
+    }));
+
+    // Clear the model selection for this member when switching filters
+    setCouncilModels(prev => {
+      const updated = [...prev];
+      updated[index] = '';
+      return updated;
+    });
   };
 
   const handleAddCouncilMember = () => {
-    if (selectedLlmProvider === 'openrouter') {
-      const filteredModels = showFreeOnly
-        ? availableModels.filter(m => m.is_free)
-        : availableModels;
-      if (filteredModels.length > 0) {
-        setCouncilModels(prev => [...prev, filteredModels[0].id]);
-      }
-    } else if (selectedLlmProvider === 'ollama') {
-      if (ollamaAvailableModels.length > 0) {
-        setOllamaCouncilModels(prev => [...prev, ollamaAvailableModels[0].id]);
-      }
-    } else if (selectedLlmProvider === 'direct') {
-      if (directAvailableModels.length > 0) {
-        setDirectCouncilModels(prev => [...prev, directAvailableModels[0].id]);
-      }
-    } else {
-      // For hybrid, try adding OpenRouter model first, then Ollama
-      const filteredModels = showFreeOnly
-        ? availableModels.filter(m => m.is_free)
-        : availableModels;
-
-      if (filteredModels.length > 0) {
-        setHybridCouncilModels(prev => [...prev, filteredModels[0].id]);
-      } else if (ollamaAvailableModels.length > 0) {
-        setHybridCouncilModels(prev => [...prev, `ollama:${ollamaAvailableModels[0].id}`]);
-      } else if (directAvailableModels.length > 0) {
-        setHybridCouncilModels(prev => [...prev, directAvailableModels[0].id]);
-      }
+    const newIndex = councilModels.length;
+    const filter = getMemberFilter(newIndex);
+    const filtered = filterByRemoteLocal(getFilteredAvailableModels(), filter);
+    if (filtered.length > 0) {
+      setCouncilModels(prev => [...prev, filtered[0].id]);
+      // Initialize filter for new member
+      setCouncilMemberFilters(prev => ({
+        ...prev,
+        [newIndex]: 'remote'
+      }));
     }
   };
 
   const handleRemoveCouncilMember = (index) => {
-    if (selectedLlmProvider === 'openrouter') {
-      setCouncilModels(prev => prev.filter((_, i) => i !== index));
-    } else if (selectedLlmProvider === 'ollama') {
-      setOllamaCouncilModels(prev => prev.filter((_, i) => i !== index));
-    } else if (selectedLlmProvider === 'direct') {
-      setDirectCouncilModels(prev => prev.filter((_, i) => i !== index));
-    } else {
-      setHybridCouncilModels(prev => prev.filter((_, i) => i !== index));
-    }
+    setCouncilModels(prev => prev.filter((_, i) => i !== index));
+    // Clean up filters - shift indices down
+    setCouncilMemberFilters(prev => {
+      const newFilters = {};
+      Object.keys(prev).forEach(key => {
+        const idx = parseInt(key);
+        if (idx < index) {
+          newFilters[idx] = prev[idx];
+        } else if (idx > index) {
+          newFilters[idx - 1] = prev[idx];
+        }
+      });
+      return newFilters;
+    });
   };
 
   const handlePromptChange = (key, value) => {
@@ -564,47 +481,25 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
       // General Settings
       setSelectedSearchProvider('duckduckgo');
       setFullContentResults(3);
-      setSelectedLlmProvider('openrouter');
       setShowFreeOnly(false);
 
-      // OpenRouter
+      // Council Configuration (unified)
       setCouncilModels(defaults.council_models);
       setChairmanModel(defaults.chairman_model);
 
-      // Ollama
+      // Ollama Base URL
       setOllamaBaseUrl('http://localhost:11434');
-      // For Ollama models, we can't really "reset" to a specific list since it depends on what's installed.
-      // We'll leave them as is or try to auto-populate if empty, but for now let's just reset the URL.
-      // Actually, let's try to refresh the list if we can, but that's async. 
-      // Let's just reset the selection logic to "try to pick valid ones" if we were to re-run loadOllamaModels.
-      // For now, preserving current Ollama selection is safer than clearing it to empty.
 
-      // Direct
-      setDirectCouncilModels([]);
-      setDirectChairmanModel('');
-
-      // Hybrid
-      setHybridCouncilModels(defaults.council_models); // Default to same as OpenRouter
-      setHybridChairmanModel(defaults.chairman_model);
-
-      // Utility Models
+      // Web Search Query Generator
       setSearchQueryModel(defaults.search_query_model);
-      // title_model removed from backend
 
       // Prompts
       setPrompts({
         stage1_prompt: defaults.stage1_prompt,
         stage2_prompt: defaults.stage2_prompt,
         stage3_prompt: defaults.stage3_prompt,
-        title_prompt: defaults.title_prompt,
         search_query_prompt: defaults.search_query_prompt
       });
-
-      // Reset Hybrid Filters
-      setHybridShowLocal(true);
-      setHybridShowOpenRouter(true);
-      setHybridShowDirect(true);
-      setHybridRowFilters({});
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -635,10 +530,8 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
         await api.updateSettings({ [keyField]: apiKey });
         setDirectKeys(prev => ({ ...prev, [keyField]: '' })); // Clear input after save
 
-        // Reload settings but preserve current UI selections
-        const currentProvider = selectedLlmProvider;
+        // Reload settings
         await loadSettings();
-        setSelectedLlmProvider(currentProvider);
 
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
@@ -663,32 +556,19 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
       // General
       search_provider: selectedSearchProvider,
       full_content_results: fullContentResults,
-      llm_provider: selectedLlmProvider,
       show_free_only: showFreeOnly,
 
-      // OpenRouter
+      // Enabled Providers
+      enabled_providers: enabledProviders,
+
+      // Council Configuration (unified)
       council_models: councilModels,
       chairman_model: chairmanModel,
 
-      // Ollama
+      // Ollama Base URL
       ollama_base_url: ollamaBaseUrl,
-      ollama_council_models: ollamaCouncilModels,
-      ollama_chairman_model: ollamaChairmanModel,
 
-      // Direct
-      direct_council_models: directCouncilModels,
-      direct_chairman_model: directChairmanModel,
-
-      // Hybrid
-      hybrid_council_models: hybridCouncilModels,
-      hybrid_chairman_model: hybridChairmanModel,
-      hybrid_show_local: hybridShowLocal,
-      hybrid_show_remote: hybridShowOpenRouter, // mapped from hybridShowOpenRouter
-      hybrid_show_direct: hybridShowDirect,
-      hybrid_direct_providers: hybridDirectProviders,
-      hybrid_row_filters: hybridRowFilters,
-
-      // Utility
+      // Web Search Query Generator
       search_query_model: searchQueryModel,
 
       // Prompts
@@ -713,78 +593,39 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
       try {
         const config = JSON.parse(e.target.result);
 
-        // Basic validation
-        if (!config.llm_provider) {
-          throw new Error("Invalid format: missing llm_provider");
-        }
-
-        // 1. Apply General Settings
+        // Apply General Settings
         if (config.search_provider) setSelectedSearchProvider(config.search_provider);
         if (config.full_content_results !== undefined) setFullContentResults(config.full_content_results);
-        if (config.llm_provider) setSelectedLlmProvider(config.llm_provider);
         if (config.show_free_only !== undefined) setShowFreeOnly(config.show_free_only);
 
-        // 2. Apply Prompts
+        // Apply Enabled Providers
+        if (config.enabled_providers) {
+          setEnabledProviders(config.enabled_providers);
+        }
+
+        // Apply Council Configuration (unified)
+        if (config.council_models) setCouncilModels(config.council_models);
+        if (config.chairman_model) setChairmanModel(config.chairman_model);
+
+        // Apply Ollama Base URL
+        if (config.ollama_base_url) setOllamaBaseUrl(config.ollama_base_url);
+
+        // Apply Web Search Query Generator
+        if (config.search_query_model) setSearchQueryModel(config.search_query_model);
+
+        // Apply Prompts
         if (config.prompts) {
           setPrompts(prev => ({ ...prev, ...config.prompts }));
         }
 
-        // 3. Apply Provider Settings & Validate Models
-        // We need to validate models for the ACTIVE provider to show immediate feedback
-        // But we should import ALL provider settings regardless
-
-        // OpenRouter
-        if (config.council_models) setCouncilModels(config.council_models);
-        if (config.chairman_model) setChairmanModel(config.chairman_model);
-
-        // Ollama
-        if (config.ollama_base_url) setOllamaBaseUrl(config.ollama_base_url);
-        if (config.ollama_council_models) setOllamaCouncilModels(config.ollama_council_models);
-        if (config.ollama_chairman_model) setOllamaChairmanModel(config.ollama_chairman_model);
-
-        // Direct
-        if (config.direct_council_models) setDirectCouncilModels(config.direct_council_models);
-        if (config.direct_chairman_model) setDirectChairmanModel(config.direct_chairman_model);
-
-        // Hybrid
-        if (config.hybrid_council_models) setHybridCouncilModels(config.hybrid_council_models);
-        if (config.hybrid_chairman_model) setHybridChairmanModel(config.hybrid_chairman_model);
-        if (config.hybrid_show_local !== undefined) setHybridShowLocal(config.hybrid_show_local);
-        if (config.hybrid_show_remote !== undefined) setHybridShowOpenRouter(config.hybrid_show_remote);
-        if (config.hybrid_show_direct !== undefined) setHybridShowDirect(config.hybrid_show_direct);
-        if (config.hybrid_direct_providers) setHybridDirectProviders(config.hybrid_direct_providers);
-        if (config.hybrid_row_filters) setHybridRowFilters(config.hybrid_row_filters);
-
-        // Utility
-        if (config.search_query_model) setSearchQueryModel(config.search_query_model);
-
-        // 4. Validation for Active Provider
-        const activeProvider = config.llm_provider || selectedLlmProvider;
-        let modelsToValidate = [];
-        let availableModelsList = [];
-
-        if (activeProvider === 'openrouter') {
-          modelsToValidate = config.council_models || [];
-          availableModelsList = availableModels;
-        } else if (activeProvider === 'ollama') {
-          modelsToValidate = config.ollama_council_models || [];
-          availableModelsList = ollamaAvailableModels;
-        } else if (activeProvider === 'direct') {
-          modelsToValidate = config.direct_council_models || [];
-          availableModelsList = directAvailableModels;
-        } else if (activeProvider === 'hybrid') {
-          modelsToValidate = config.hybrid_council_models || [];
-          availableModelsList = [
-            ...availableModels,
-            ...ollamaAvailableModels.map(m => ({ ...m, id: `ollama:${m.id}` })),
-            ...directAvailableModels
-          ];
-        }
-
-        const missingModels = modelsToValidate.filter(id => !availableModelsList.find(m => m.id === id));
+        // Validate imported models against all available models
+        const allModels = getAllAvailableModels();
+        const missingModels = (config.council_models || []).filter(id =>
+          !allModels.find(m => m.id === id)
+        );
 
         if (missingModels.length > 0) {
-          setError(`Imported with warnings: Active models not found: ${missingModels.join(', ')}`);
+          setError(`Imported with warnings: Models not found: ${missingModels.join(', ')}`);
         } else {
           setSuccess(true);
           setTimeout(() => setSuccess(false), 3000);
@@ -808,18 +649,16 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
       const updates = {
         search_provider: selectedSearchProvider,
         full_content_results: fullContentResults,
-        llm_provider: selectedLlmProvider,
-        ollama_base_url: ollamaBaseUrl,
-        ollama_council_models: ollamaCouncilModels,
-        ollama_chairman_model: ollamaChairmanModel,
-        direct_council_models: directCouncilModels,
-        direct_chairman_model: directChairmanModel,
-        hybrid_council_models: hybridCouncilModels,
-        hybrid_chairman_model: hybridChairmanModel,
+
+        // Enabled Providers
+        enabled_providers: enabledProviders,
+        direct_provider_toggles: directProviderToggles,
+
+        // Council Configuration (unified)
         council_models: councilModels,
         chairman_model: chairmanModel,
 
-        // Utility Models
+        // Web Search Query Generator
         search_query_model: searchQueryModel,
 
         // Prompts
@@ -837,7 +676,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
         updates.openrouter_api_key = openrouterApiKey;
       }
 
-      // Add Direct Keys
+      // Add Direct Provider Keys
       Object.entries(directKeys).forEach(([key, value]) => {
         if (value && !value.startsWith('•')) {
           updates[key] = value;
@@ -859,28 +698,75 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
     }
   };
 
-  const getRowFilter = (index, modelId) => {
-    // If we have an explicit user choice, use it
-    if (hybridRowFilters[index]) return hybridRowFilters[index];
-
-    // Otherwise infer from the model ID
-    if (modelId && modelId.toString().startsWith('ollama:')) return 'local';
-    return 'remote'; // Default to remote
+  // Helper function to check if a direct provider is configured
+  const isDirectProviderConfigured = (providerName) => {
+    switch (providerName) {
+      case 'OpenAI': return !!(directKeys.openai_api_key || settings?.openai_api_key_set);
+      case 'Anthropic': return !!(directKeys.anthropic_api_key || settings?.anthropic_api_key_set);
+      case 'Google': return !!(directKeys.google_api_key || settings?.google_api_key_set);
+      case 'Mistral': return !!(directKeys.mistral_api_key || settings?.mistral_api_key_set);
+      case 'DeepSeek': return !!(directKeys.deepseek_api_key || settings?.deepseek_api_key_set);
+      default: return false;
+    }
   };
 
-  const toggleRowFilter = (index, type) => {
-    setHybridRowFilters(prev => ({
-      ...prev,
-      [index]: type
-    }));
+  // Get all available models from all sources
+  const getAllAvailableModels = () => {
+    const models = [];
+
+    // Add OpenRouter models if enabled
+    if (enabledProviders.openrouter) {
+      models.push(...availableModels);
+    }
+
+    // Add Ollama models if enabled
+    if (enabledProviders.ollama) {
+      models.push(...ollamaAvailableModels.map(m => ({
+        ...m,
+        id: `ollama:${m.id}`,
+        name: `${m.name || m.id} (Local)`
+      })));
+    }
+
+    // Add direct provider models if master toggle is enabled AND individual provider is enabled
+    if (enabledProviders.direct) {
+      const filteredDirectModels = directAvailableModels.filter(m => {
+        const providerKey = m.provider.toLowerCase();
+        const individualToggleEnabled = directProviderToggles[providerKey];
+        const providerConfigured = isDirectProviderConfigured(m.provider);
+        return individualToggleEnabled && providerConfigured;
+      });
+      models.push(...filteredDirectModels);
+    }
+
+    return models.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   };
 
-  // Same for Chairman
-  const [chairmanFilter, setChairmanFilter] = useState(null);
-  const getChairmanFilter = (currentId) => {
-    if (chairmanFilter) return chairmanFilter;
-    if (currentId && currentId.toString().startsWith('ollama:')) return 'local';
-    return 'remote';
+  // Get filtered models for council member selection (respects free filter)
+  const getFilteredAvailableModels = () => {
+    const all = getAllAvailableModels();
+    if (!showFreeOnly) return all;
+
+    // Filter to free models, but keep Ollama models (they're always "free")
+    return all.filter(m => m.is_free || m.id.startsWith('ollama:'));
+  };
+
+  // Get models available for chairman (paid models only, unless it's Ollama)
+  const getChairmanModels = () => {
+    const all = getAllAvailableModels();
+    // Chairman should be a paid/premium model (or local Ollama)
+    return all.filter(m => !m.is_free || m.id.startsWith('ollama:'));
+  };
+
+  // Filter models by remote/local for specific use case
+  const filterByRemoteLocal = (models, filter) => {
+    if (filter === 'local') {
+      // Only Ollama models
+      return models.filter(m => m.id.startsWith('ollama:'));
+    } else {
+      // Remote: OpenRouter + Direct providers (exclude Ollama)
+      return models.filter(m => !m.id.startsWith('ollama:'));
+    }
   };
 
   if (!settings) {
@@ -894,106 +780,10 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
   }
 
   const selectedProviderInfo = SEARCH_PROVIDERS.find(p => p.id === selectedSearchProvider);
-  let currentAvailableModels = [];
-  let currentCouncilModels = [];
-  let currentChairmanModel = '';
-
-  const isDirectProviderConfigured = (providerName) => {
-    switch (providerName) {
-      case 'OpenAI': return !!(directKeys.openai_api_key || settings?.openai_api_key_set);
-      case 'Anthropic': return !!(directKeys.anthropic_api_key || settings?.anthropic_api_key_set);
-      case 'Google': return !!(directKeys.google_api_key || settings?.google_api_key_set);
-      case 'Mistral': return !!(directKeys.mistral_api_key || settings?.mistral_api_key_set);
-      case 'DeepSeek': return !!(directKeys.deepseek_api_key || settings?.deepseek_api_key_set);
-      default: return false;
-    }
-  };
-
-  const filteredDirectModels = directAvailableModels.filter(m => isDirectProviderConfigured(m.provider));
-
-  if (selectedLlmProvider === 'openrouter') {
-    currentAvailableModels = availableModels;
-    currentCouncilModels = councilModels;
-    currentChairmanModel = chairmanModel;
-  } else if (selectedLlmProvider === 'ollama') {
-    currentAvailableModels = ollamaAvailableModels;
-    currentCouncilModels = ollamaCouncilModels;
-    currentChairmanModel = ollamaChairmanModel;
-  } else if (selectedLlmProvider === 'direct') {
-    currentAvailableModels = filteredDirectModels;
-    currentCouncilModels = directCouncilModels;
-    currentChairmanModel = directChairmanModel;
-  } else {
-    // Hybrid: Merge models from all sources
-    const openRouterMapped = availableModels.map(m => ({ ...m, name: `${m.name || m.id} (OpenRouter)` }));
-    const ollamaMapped = ollamaAvailableModels.map(m => ({
-      ...m,
-      id: `ollama:${m.id}`,
-      name: `${m.name || m.id} (Local)`
-    }));
-    // Merge all
-    currentAvailableModels = [...openRouterMapped, ...ollamaMapped, ...filteredDirectModels].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    currentCouncilModels = hybridCouncilModels;
-    currentChairmanModel = hybridChairmanModel;
-  }
-
-  const filteredModels = (selectedLlmProvider !== 'ollama' && showFreeOnly)
-    ? currentAvailableModels.filter(m => m.is_free || m.id.startsWith('ollama:')) // Assume local is free/allowed
-    : currentAvailableModels;
-
-  const chairmanModels = (selectedLlmProvider === 'ollama')
-    ? currentAvailableModels
-    : currentAvailableModels.filter(m => !m.is_free || (m.id && m.id.startsWith('ollama:')));
-
-  const getFilteredModels = (filter) => {
-    if (!filter) return chairmanModels;
-    if (filter === 'local') return chairmanModels.filter(m => m.id.startsWith('ollama:'));
-    return chairmanModels.filter(m => !m.id.startsWith('ollama:'));
-  };
 
   const renderModelOptions = (models) => {
-    // Filter models based on Hybrid settings if in Hybrid mode
-    let filteredModels = models;
-    if (selectedLlmProvider === 'hybrid') {
-      filteredModels = models.filter(model => {
-        // Local (Ollama)
-        if (model.id.startsWith('ollama:')) {
-          return hybridShowLocal;
-        }
-
-        // Direct Providers
-        if (model.provider && ['OpenAI', 'Anthropic', 'Google', 'Mistral', 'DeepSeek'].includes(model.provider) && !model.id.startsWith('ollama:')) {
-          // Check if it's a direct model (not OpenRouter)
-          // OpenRouter models usually don't have these exact provider strings in this context unless mapped, 
-          // but our direct models do.
-          // However, OpenRouter models ALSO have "provider" fields. 
-          // We need to distinguish. 
-          // Direct models in our app currently use IDs like "openai:..." or "google:..." 
-          // OpenRouter models usually come as "openai/gpt-4..."
-
-          const isDirectId = model.id.includes(':') && !model.id.startsWith('ollama:');
-
-          if (isDirectId) {
-            if (!hybridShowDirect) return false;
-            // Check specific provider toggle
-            const providerKey = model.provider.toLowerCase();
-            return hybridDirectProviders[providerKey] !== false; // Default true
-          }
-        }
-
-        // OpenRouter (everything else)
-        // If it's not local and not direct (based on our ID convention), it's OpenRouter
-        const isDirectId = model.id.includes(':') && !model.id.startsWith('ollama:');
-        if (!model.id.startsWith('ollama:') && !isDirectId) {
-          return hybridShowOpenRouter;
-        }
-
-        return true;
-      });
-    }
-
     // Group models by provider
-    const grouped = filteredModels.reduce((acc, model) => {
+    const grouped = models.reduce((acc, model) => {
       // Determine provider
       let provider = model.provider || 'Other';
       if (model.id.startsWith('ollama:')) provider = 'Local (Ollama)';
@@ -1025,7 +815,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
       <optgroup key={provider} label={provider}>
         {grouped[provider].map(model => (
           <option key={model.id} value={model.id}>
-            {model.name} {model.is_free && selectedLlmProvider === 'openrouter' ? '(Free)' : ''}
+            {model.name}
           </option>
         ))}
       </optgroup>
@@ -1042,188 +832,160 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
 
         <div className="settings-content">
 
-          {/* LLM Provider Selection with Nested Configs */}
+          {/* API Keys Configuration */}
           <section className="settings-section">
-            <h3>LLM Provider</h3>
+            <h3>API Keys</h3>
             <p className="section-description">
-              Choose between cloud-based models (OpenRouter), local models (Ollama), direct API keys, or a mix.
+              Configure your API keys for different LLM providers and services.
             </p>
 
-            <div className="provider-options">
-              {LLM_PROVIDERS.map(provider => (
-                <div
-                  key={provider.id}
-                  className={`provider-option-container ${selectedLlmProvider === provider.id ? 'selected' : ''}`}
+            {/* OpenRouter */}
+            <div className="api-key-section">
+              <label>OpenRouter API Key</label>
+              <div className="api-key-input-row">
+                <input
+                  type="password"
+                  placeholder={settings?.openrouter_api_key_set ? '••••••••••••••••' : 'Enter API key'}
+                  value={openrouterApiKey}
+                  onChange={(e) => {
+                    setOpenrouterApiKey(e.target.value);
+                    setOpenrouterTestResult(null);
+                  }}
+                  className={settings?.openrouter_api_key_set && !openrouterApiKey ? 'key-configured' : ''}
+                />
+                <button
+                  className="test-button"
+                  onClick={handleTestOpenRouter}
+                  disabled={!openrouterApiKey && !settings?.openrouter_api_key_set || isTestingOpenRouter}
                 >
-                  <label className="provider-option">
+                  {isTestingOpenRouter ? 'Testing...' : (settings?.openrouter_api_key_set && !openrouterApiKey ? 'Retest' : 'Test')}
+                </button>
+              </div>
+              {settings?.openrouter_api_key_set && !openrouterApiKey && (
+                <div className="key-status set">✓ API key configured</div>
+              )}
+              {openrouterTestResult && (
+                <div className={`test-result ${openrouterTestResult.success ? 'success' : 'error'}`}>
+                  {openrouterTestResult.message}
+                </div>
+              )}
+              <p className="api-key-hint">
+                Get your key from <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai</a>
+              </p>
+            </div>
+
+            {/* Ollama */}
+            <div className="api-key-section">
+              <label>Ollama Base URL</label>
+              <div className="api-key-input-row">
+                <input
+                  type="text"
+                  placeholder="http://localhost:11434"
+                  value={ollamaBaseUrl}
+                  onChange={(e) => {
+                    setOllamaBaseUrl(e.target.value);
+                    setOllamaTestResult(null);
+                  }}
+                />
+                <button
+                  className="test-button"
+                  onClick={handleTestOllama}
+                  disabled={!ollamaBaseUrl || isTestingOllama}
+                >
+                  {isTestingOllama ? 'Testing...' : 'Connect'}
+                </button>
+              </div>
+              {ollamaTestResult && (
+                <div className={`test-result ${ollamaTestResult.success ? 'success' : 'error'}`}>
+                  {ollamaTestResult.message}
+                </div>
+              )}
+              {ollamaStatus && ollamaStatus.connected && (
+                <div className="ollama-auto-status connected">
+                  <span className="status-indicator connected">●</span>
+                  <span className="status-text">
+                    <strong>Connected to Ollama</strong> <span className="status-separator">·</span> <span className="status-time">Last checked: {new Date(ollamaStatus.lastConnected).toLocaleString()}</span>
+                  </span>
+                </div>
+              )}
+              {ollamaStatus && !ollamaStatus.connected && !ollamaStatus.testing && (
+                <div className="ollama-auto-status">
+                  <span className="status-indicator disconnected">●</span>
+                  <span className="status-text">Not connected</span>
+                </div>
+              )}
+              <p className="api-key-hint">
+                Default is http://localhost:11434
+              </p>
+              <div className="model-options-row" style={{ marginTop: '12px' }}>
+                <button
+                  type="button"
+                  className="reset-defaults-button"
+                  onClick={() => loadOllamaModels(ollamaBaseUrl)}
+                >
+                  Refresh Local Models
+                </button>
+                {ollamaAvailableModels.length === 0 && enabledProviders.ollama && (
+                  <span className="error-text">No local models found. Check connection.</span>
+                )}
+              </div>
+            </div>
+
+            {/* Direct LLM API Connections */}
+            <div className="subsection" style={{ marginTop: '24px' }}>
+              <h4>Direct LLM API Connections</h4>
+              <p className="section-description" style={{ marginBottom: '12px' }}>
+                Connect directly to LLM providers using your own API keys.
+              </p>
+
+              {DIRECT_PROVIDERS.map(dp => (
+                <div key={dp.id} className="api-key-section">
+                  <label>{dp.name} API Key</label>
+                  <div className="api-key-input-row">
                     <input
-                      type="radio"
-                      name="llm_provider"
-                      value={provider.id}
-                      checked={selectedLlmProvider === provider.id}
-                      onChange={(e) => setSelectedLlmProvider(e.target.value)}
+                      type="password"
+                      placeholder={settings?.[`${dp.key}_set`] ? '••••••••••••••••' : 'Enter API key'}
+                      value={directKeys[dp.key]}
+                      onChange={e => setDirectKeys(prev => ({ ...prev, [dp.key]: e.target.value }))}
+                      className={settings?.[`${dp.key}_set`] && !directKeys[dp.key] ? 'key-configured' : ''}
                     />
-                    <div className="provider-info">
-                      <span className="provider-name">{provider.name}</span>
-                      <span className="provider-description">{provider.description}</span>
-                    </div>
-                  </label>
-
-                  {/* Nested Configuration Sections */}
-
-                  {/* OpenRouter Config */}
-                  {provider.id === 'openrouter' && (selectedLlmProvider === 'openrouter' || selectedLlmProvider === 'hybrid') && (
-                    <div className="provider-config-nested">
-                      <div className="api-key-section">
-                        <label>OpenRouter API Key</label>
-                        <div className="api-key-input-row">
-                          <input
-                            type="password"
-                            placeholder={settings?.openrouter_api_key_set ? '••••••••••••••••' : 'Enter API key'}
-                            value={openrouterApiKey}
-                            onChange={(e) => {
-                              setOpenrouterApiKey(e.target.value);
-                              setOpenrouterTestResult(null);
-                            }}
-                            className={settings?.openrouter_api_key_set && !openrouterApiKey ? 'key-configured' : ''}
-                          />
-                          <button
-                            className="test-button"
-                            onClick={handleTestOpenRouter}
-                            disabled={!openrouterApiKey && !settings?.openrouter_api_key_set || isTestingOpenRouter}
-                          >
-                            {isTestingOpenRouter ? 'Testing...' : (settings?.openrouter_api_key_set && !openrouterApiKey ? 'Retest' : 'Test')}
-                          </button>
-                        </div>
-                        {settings?.openrouter_api_key_set && !openrouterApiKey && (
-                          <div className="key-status set">✓ API key configured</div>
-                        )}
-                        {openrouterTestResult && (
-                          <div className={`test-result ${openrouterTestResult.success ? 'success' : 'error'}`}>
-                            {openrouterTestResult.message}
-                          </div>
-                        )}
-                        <p className="api-key-hint">
-                          Get your key from <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai</a>
-                        </p>
-                      </div>
+                    <button
+                      className="test-button"
+                      onClick={() => handleTestDirectKey(dp.id, dp.key)}
+                      disabled={(!directKeys[dp.key] && !settings?.[`${dp.key}_set`]) || validatingKeys[dp.id]}
+                    >
+                      {validatingKeys[dp.id] ? 'Testing...' : (settings?.[`${dp.key}_set`] && !directKeys[dp.key] ? 'Retest' : 'Test')}
+                    </button>
+                  </div>
+                  {settings?.[`${dp.key}_set`] && !directKeys[dp.key] && (
+                    <div className="key-status set">✓ API key configured</div>
+                  )}
+                  {keyValidationStatus[dp.id] && (
+                    <div className={`test-result ${keyValidationStatus[dp.id].success ? 'success' : 'error'}`}>
+                      {keyValidationStatus[dp.id].message}
                     </div>
                   )}
-
-                  {/* Ollama Config */}
-                  {provider.id === 'ollama' && (selectedLlmProvider === 'ollama' || selectedLlmProvider === 'hybrid') && (
-                    <div className="provider-config-nested">
-                      <div className="api-key-section">
-                        <label>Ollama Base URL</label>
-                        <div className="api-key-input-row">
-                          <input
-                            type="text"
-                            placeholder="http://localhost:11434"
-                            value={ollamaBaseUrl}
-                            onChange={(e) => {
-                              setOllamaBaseUrl(e.target.value);
-                              setOllamaTestResult(null);
-                            }}
-                          />
-                          <button
-                            className="test-button"
-                            onClick={handleTestOllama}
-                            disabled={!ollamaBaseUrl || isTestingOllama}
-                          >
-                            {isTestingOllama ? 'Testing...' : 'Connect'}
-                          </button>
-                        </div>
-                        {ollamaTestResult && (
-                          <div className={`test-result ${ollamaTestResult.success ? 'success' : 'error'}`}>
-                            {ollamaTestResult.message}
-                          </div>
-                        )}
-
-                        {/* Auto-connection status */}
-                        {ollamaStatus && ollamaStatus.connected && (
-                          <div className="ollama-auto-status connected">
-                            <span className="status-indicator connected">●</span>
-                            <span className="status-text">
-                              <strong>Connected to Ollama</strong> <span className="status-separator">·</span> <span className="status-time">Last checked: {new Date(ollamaStatus.lastConnected).toLocaleString()}</span>
-                            </span>
-                          </div>
-                        )}
-                        {ollamaStatus && !ollamaStatus.connected && !ollamaStatus.testing && (
-                          <div className="ollama-auto-status">
-                            <span className="status-indicator disconnected">●</span>
-                            <span className="status-text">Not connected</span>
-                          </div>
-                        )}
-
-                        <p className="api-key-hint">
-                          Default is http://localhost:11434
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Direct Config */}
-                  {provider.id === 'direct' && (selectedLlmProvider === 'direct' || selectedLlmProvider === 'hybrid') && (
-                    <div className="provider-config-nested">
-                      {DIRECT_PROVIDERS.map(dp => (
-                        <div key={dp.id} className="api-key-section" style={{ marginTop: '10px' }}>
-                          <label>{dp.name} API Key</label>
-                          <div className="api-key-input-row">
-                            <input
-                              type="password"
-                              placeholder={settings?.[`${dp.key}_set`] ? '••••••••••••••••' : 'Enter API key'}
-                              value={directKeys[dp.key]}
-                              onChange={e => setDirectKeys(prev => ({ ...prev, [dp.key]: e.target.value }))}
-                              className={settings?.[`${dp.key}_set`] && !directKeys[dp.key] ? 'key-configured' : ''}
-                            />
-                            <button
-                              className="test-button"
-                              onClick={() => handleTestDirectKey(dp.id, dp.key)}
-                              disabled={(!directKeys[dp.key] && !settings?.[`${dp.key}_set`]) || validatingKeys[dp.id]}
-                            >
-                              {validatingKeys[dp.id] ? 'Testing...' : (settings?.[`${dp.key}_set`] && !directKeys[dp.key] ? 'Retest' : 'Test')}
-                            </button>
-                          </div>
-                          {settings?.[`${dp.key}_set`] && !directKeys[dp.key] && (
-                            <div className="key-status set">✓ API key configured</div>
-                          )}
-                          {keyValidationStatus[dp.id] && (
-                            <div className={`test-result ${keyValidationStatus[dp.id].success ? 'success' : 'error'}`}>
-                              {keyValidationStatus[dp.id].message}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Hybrid Note */}
-                  {provider.id === 'hybrid' && selectedLlmProvider === 'hybrid' && (
-                    <div className="provider-config-nested">
-                      <p className="section-description" style={{ marginBottom: 0 }}>
-                        Configure individual providers above (OpenRouter, Ollama, Direct) to use them in Hybrid mode.
-                      </p>
-                    </div>
-                  )}
-
                 </div>
               ))}
             </div>
           </section>
 
-          {/* Hybrid Mode Configuration - Redesigned Card Layout */}
-          {selectedLlmProvider === 'hybrid' && (
-            <div className="hybrid-settings-card">
-              <span className="hybrid-section-header">Model Sources</span>
+          {/* Available Model Sources */}
+          <section className="settings-section">
+            <h3>Available Model Sources</h3>
+            <p className="section-description">
+              Toggle which providers are available for the search generator, council members, and chairman. Configure API keys above before enabling.
+            </p>
 
-              {/* Primary Sources Group */}
+            <div className="hybrid-settings-card">
+              {/* Primary Sources */}
               <div className="filter-group">
                 <label className="toggle-wrapper">
                   <div className="toggle-switch">
                     <input
                       type="checkbox"
-                      checked={hybridShowOpenRouter}
-                      onChange={(e) => setHybridShowOpenRouter(e.target.checked)}
+                      checked={enabledProviders.openrouter}
+                      onChange={(e) => setEnabledProviders(prev => ({ ...prev, openrouter: e.target.checked }))}
                     />
                     <span className="slider"></span>
                   </div>
@@ -1234,8 +996,8 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
                   <div className="toggle-switch">
                     <input
                       type="checkbox"
-                      checked={hybridShowLocal}
-                      onChange={(e) => setHybridShowLocal(e.target.checked)}
+                      checked={enabledProviders.ollama}
+                      onChange={(e) => setEnabledProviders(prev => ({ ...prev, ollama: e.target.checked }))}
                     />
                     <span className="slider"></span>
                   </div>
@@ -1245,14 +1007,14 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
 
               <div className="filter-divider"></div>
 
-              {/* Direct Connections Group */}
-              <div className="filter-group" style={{ marginBottom: hybridShowDirect ? '16px' : '0' }}>
+              {/* Direct Connections Master Toggle */}
+              <div className="filter-group" style={{ marginBottom: enabledProviders.direct ? '16px' : '0' }}>
                 <label className="toggle-wrapper">
                   <div className="toggle-switch">
                     <input
                       type="checkbox"
-                      checked={hybridShowDirect}
-                      onChange={(e) => setHybridShowDirect(e.target.checked)}
+                      checked={enabledProviders.direct}
+                      onChange={(e) => setEnabledProviders(prev => ({ ...prev, direct: e.target.checked }))}
                     />
                     <span className="slider"></span>
                   </div>
@@ -1260,129 +1022,86 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
                 </label>
               </div>
 
-              {/* Direct Providers Grid */}
-              {hybridShowDirect && (
+              {/* Individual Direct Provider Toggles (purple) */}
+              {enabledProviders.direct && (
                 <div className="direct-grid">
-                  {Object.keys(hybridDirectProviders).map(provider => (
-                    <label key={provider} className="toggle-wrapper">
-                      <div className="toggle-switch" style={{ width: '34px', height: '20px' }}>
+                  {DIRECT_PROVIDERS.map(dp => (
+                    <label key={dp.id} className="toggle-wrapper">
+                      <div className="toggle-switch direct-toggle">
                         <input
                           type="checkbox"
-                          checked={hybridDirectProviders[provider]}
-                          onChange={(e) => setHybridDirectProviders(prev => ({
-                            ...prev,
-                            [provider]: e.target.checked
-                          }))}
+                          checked={directProviderToggles[dp.id]}
+                          onChange={(e) => setDirectProviderToggles(prev => ({ ...prev, [dp.id]: e.target.checked }))}
                         />
-                        <span className="slider" style={{ borderRadius: '20px' }}></span>
-                        <style>{`
-                          .direct-grid .slider:before {
-                            height: 16px;
-                            width: 16px;
-                            left: 2px;
-                            bottom: 2px;
-                          }
-                          .direct-grid input:checked + .slider:before {
-                            transform: translateX(14px);
-                          }
-                        `}</style>
+                        <span className="slider"></span>
                       </div>
                       <span className="toggle-text" style={{ fontSize: '13px' }}>
-                        {provider.charAt(0).toUpperCase() + provider.slice(1)}
+                        {dp.name}
                       </span>
                     </label>
                   ))}
                 </div>
               )}
             </div>
-          )}
+          </section>
 
-          {/* Utility Models Selection */}
+          {/* Web Search Query Generator */}
           <section className="settings-section">
-            <h3>Utility Models</h3>
+            <h3>Web Search Query Generator</h3>
             <p className="section-description">
-              Select models for generating optimized search queries from user questions.
+              Select a model to generate optimized search queries from user questions.
             </p>
 
-            {/* Search Query Model */}
             <div className="council-member-row">
-              <span className="member-label">Search Query</span>
-              {selectedLlmProvider === 'hybrid' && (
-                <div className="model-type-toggle">
-                  <button
-                    type="button"
-                    className={`type-btn ${!searchQueryModel.startsWith('ollama:') ? 'active' : ''}`}
-                    onClick={() => {
-                      if (availableModels.length > 0) setSearchQueryModel(availableModels[0].id);
-                    }}
-                  >
-                    Remote
-                  </button>
-                  <button
-                    type="button"
-                    className={`type-btn ${searchQueryModel.startsWith('ollama:') ? 'active' : ''}`}
-                    onClick={() => {
-                      if (ollamaAvailableModels.length > 0) setSearchQueryModel(`ollama:${ollamaAvailableModels[0].id}`);
-                    }}
-                  >
-                    Local
-                  </button>
-                </div>
-              )}
+              <span className="member-label">Search Query Model</span>
+              <div className="model-type-toggle">
+                <button
+                  type="button"
+                  className={`type-btn ${searchQueryFilter === 'remote' ? 'active' : ''}`}
+                  onClick={() => {
+                    setSearchQueryFilter('remote');
+                    setSearchQueryModel('');
+                  }}
+                >
+                  Remote
+                </button>
+                <button
+                  type="button"
+                  className={`type-btn ${searchQueryFilter === 'local' ? 'active' : ''}`}
+                  onClick={() => {
+                    setSearchQueryFilter('local');
+                    setSearchQueryModel('');
+                  }}
+                >
+                  Local
+                </button>
+              </div>
               <select
                 value={searchQueryModel}
                 onChange={(e) => setSearchQueryModel(e.target.value)}
                 className="model-select"
               >
-                {(selectedLlmProvider === 'ollama' || (selectedLlmProvider === 'hybrid' && searchQueryModel.startsWith('ollama:'))) ? (
-                  ollamaAvailableModels.map(model => (
-                    <option key={model.id} value={`ollama:${model.id}`}>
-                      {model.name}
-                    </option>
-                  ))
-                ) : (
-                  <>
-                    <option value="">Select a model</option>
-                    {renderModelOptions(currentAvailableModels.filter(m => !m.id.startsWith('ollama:')))}
-                  </>
-                )}
+                <option value="">Select a model</option>
+                {renderModelOptions(filterByRemoteLocal(getAllAvailableModels(), searchQueryFilter))}
               </select>
             </div>
-
-
           </section>
 
-          {/* Model Selection (Context Sensitive) */}
+          {/* Council Configuration */}
           <section className="settings-section">
-            <h3>Model Selection</h3>
+            <h3>Council Configuration</h3>
 
-            {(selectedLlmProvider === 'openrouter' || selectedLlmProvider === 'hybrid') && (
-              <div className="model-options-row">
-                <label className="free-filter-label">
-                  <input
-                    type="checkbox"
-                    checked={showFreeOnly}
-                    onChange={e => setShowFreeOnly(e.target.checked)}
-                  />
-                  Show free OpenRouter models only
-                </label>
-                {isLoadingModels && <span className="loading-models">Loading models...</span>}
-              </div>
-            )}
-            {(selectedLlmProvider === 'ollama' || selectedLlmProvider === 'hybrid') && (
-              <div className="model-options-row">
-                <button
-                  type="button"
-                  className="reset-defaults-button"
-                  onClick={() => loadOllamaModels(ollamaBaseUrl)}
-                >
-                  Refresh Local Models
-                </button>
-                {ollamaAvailableModels.length === 0 && <span className="error-text">No local models found. Check connection.</span>}
-              </div>
-            )}
-
-
+            <div className="model-options-row">
+              <label className="free-filter-label">
+                <input
+                  type="checkbox"
+                  checked={showFreeOnly}
+                  onChange={e => setShowFreeOnly(e.target.checked)}
+                />
+                Show free OpenRouter models only
+              </label>
+              {isLoadingModels && <span className="loading-models">Loading models...</span>}
+            </div>
 
             {/* Council Members */}
             <div className="subsection" style={{ marginTop: '20px' }}>
@@ -1390,54 +1109,37 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
                 <h4 style={{ margin: 0 }}>Council Members</h4>
               </div>
               <div className="council-members">
-                {currentCouncilModels.map((modelId, index) => {
-                  // Determine filter mode for this row (only relevant for Hybrid)
-                  const isHybrid = selectedLlmProvider === 'hybrid';
-                  const filter = isHybrid ? getRowFilter(index, modelId) : null;
-
-                  // Filter options based on mode
-                  let options = filteredModels;
-                  if (isHybrid) {
-                    if (filter === 'local') {
-                      options = filteredModels.filter(m => m.id.startsWith('ollama:'));
-                    } else {
-                      options = filteredModels.filter(m => !m.id.startsWith('ollama:'));
-                    }
-                  }
-
+                {councilModels.map((modelId, index) => {
+                  const memberFilter = getMemberFilter(index);
                   return (
                     <div key={index} className="council-member-row">
                       <span className="member-label">Member {index + 1}</span>
-
-                      {isHybrid && (
-                        <div className="model-type-toggle">
-                          <button
-                            type="button"
-                            className={`type-btn ${filter === 'remote' ? 'active' : ''}`}
-                            onClick={() => toggleRowFilter(index, 'remote')}
-                          >
-                            Remote
-                          </button>
-                          <button
-                            type="button"
-                            className={`type-btn ${filter === 'local' ? 'active' : ''}`}
-                            onClick={() => toggleRowFilter(index, 'local')}
-                          >
-                            Local
-                          </button>
-                        </div>
-                      )}
-
+                      <div className="model-type-toggle">
+                        <button
+                          type="button"
+                          className={`type-btn ${memberFilter === 'remote' ? 'active' : ''}`}
+                          onClick={() => handleMemberFilterChange(index, 'remote')}
+                        >
+                          Remote
+                        </button>
+                        <button
+                          type="button"
+                          className={`type-btn ${memberFilter === 'local' ? 'active' : ''}`}
+                          onClick={() => handleMemberFilterChange(index, 'local')}
+                        >
+                          Local
+                        </button>
+                      </div>
                       <select
                         value={modelId}
                         onChange={e => handleCouncilModelChange(index, e.target.value)}
                         className="model-select"
                       >
-                        {renderModelOptions(options)}
+                        {renderModelOptions(filterByRemoteLocal(getFilteredAvailableModels(), memberFilter))}
                         {/* Keep current selection visible even if filtered out */}
-                        {!options.find(m => m.id === modelId) && (
+                        {!filterByRemoteLocal(getFilteredAvailableModels(), memberFilter).find(m => m.id === modelId) && (
                           <option value={modelId}>
-                            {currentAvailableModels.find(m => m.id === modelId)?.name || modelId}
+                            {getAllAvailableModels().find(m => m.id === modelId)?.name || modelId}
                           </option>
                         )}
                       </select>
@@ -1445,7 +1147,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
                         type="button"
                         className="remove-member-button"
                         onClick={() => handleRemoveCouncilMember(index)}
-                        disabled={currentCouncilModels.length <= 2}
+                        disabled={councilModels.length <= 2}
                         title="Remove member"
                       >
                         ×
@@ -1458,16 +1160,19 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
                 type="button"
                 className="add-member-button"
                 onClick={handleAddCouncilMember}
-                disabled={filteredModels.length === 0 || currentCouncilModels.length >= 8}
+                disabled={getFilteredAvailableModels().length === 0 || councilModels.length >= 8}
               >
                 + Add Council Member
               </button>
-              {currentCouncilModels.length >= 6 && (selectedLlmProvider !== 'ollama') && (
+              <p className="section-description" style={{ marginTop: '8px', marginBottom: '0' }}>
+                You can add up to 8 council members. With 6 or more members, requests are processed in batches to avoid rate limits.
+              </p>
+              {councilModels.length >= 6 && (
                 <div className="council-size-warning">
                   ⚠️ <strong>6+ members:</strong> To avoid rate limits, we'll process requests in batches of 3. Max 8 members allowed.
                 </div>
               )}
-              {currentCouncilModels.length >= 8 && (
+              {councilModels.length >= 8 && (
                 <div className="council-size-info">
                   ✓ Maximum council size (8 members) reached
                 </div>
@@ -1476,46 +1181,39 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
 
             {/* Chairman */}
             <div className="subsection" style={{ marginTop: '20px' }}>
-              <h4>Chairman Model</h4>
-              <div className="chairman-selection" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                {selectedLlmProvider === 'hybrid' && (
-                  <div className="model-type-toggle">
-                    <button
-                      type="button"
-                      className={`type-btn ${getChairmanFilter(currentChairmanModel) === 'remote' ? 'active' : ''}`}
-                      onClick={() => setChairmanFilter('remote')}
-                    >
-                      Remote
-                    </button>
-                    <button
-                      type="button"
-                      className={`type-btn ${getChairmanFilter(currentChairmanModel) === 'local' ? 'active' : ''}`}
-                      onClick={() => setChairmanFilter('local')}
-                    >
-                      Local
-                    </button>
-                  </div>
-                )}
-
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h4 style={{ margin: 0 }}>Chairman Model</h4>
+                <div className="model-type-toggle">
+                  <button
+                    type="button"
+                    className={`type-btn ${chairmanFilter === 'remote' ? 'active' : ''}`}
+                    onClick={() => {
+                      setChairmanFilter('remote');
+                      setChairmanModel('');
+                    }}
+                  >
+                    Remote
+                  </button>
+                  <button
+                    type="button"
+                    className={`type-btn ${chairmanFilter === 'local' ? 'active' : ''}`}
+                    onClick={() => {
+                      setChairmanFilter('local');
+                      setChairmanModel('');
+                    }}
+                  >
+                    Local
+                  </button>
+                </div>
+              </div>
+              <div className="chairman-selection">
                 <select
-                  value={currentChairmanModel}
-                  onChange={(e) => {
-                    const newValue = e.target.value;
-                    if (selectedLlmProvider === 'openrouter') setChairmanModel(newValue);
-                    else if (selectedLlmProvider === 'ollama') setOllamaChairmanModel(newValue);
-                    else setHybridChairmanModel(newValue);
-                  }}
+                  value={chairmanModel}
+                  onChange={(e) => setChairmanModel(e.target.value)}
                   className="model-select"
-                  style={{ flex: 1 }}
                 >
-                  {renderModelOptions(getFilteredModels(getChairmanFilter(currentChairmanModel)))}
-                  {/* Keep current selection visible even if filtered out */}
-                  {!getFilteredModels(getChairmanFilter(currentChairmanModel)).find(m => m.id === currentChairmanModel) && currentChairmanModel && (
-                    <option value={currentChairmanModel}>
-                      {currentAvailableModels.find(m => m.id === currentChairmanModel)?.name || currentChairmanModel}
-                      {(selectedLlmProvider !== 'ollama' && !currentChairmanModel.startsWith('ollama:')) ? ' (not recommended)' : ''}
-                    </option>
-                  )}
+                  <option value="">Select a model</option>
+                  {renderModelOptions(filterByRemoteLocal(getChairmanModels(), chairmanFilter))}
                 </select>
               </div>
             </div>

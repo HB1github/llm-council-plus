@@ -3,7 +3,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict
 from pydantic import BaseModel
 from .search import SearchProvider
 
@@ -19,7 +19,22 @@ DEFAULT_COUNCIL_MODELS = [
 ]
 DEFAULT_CHAIRMAN_MODEL = "google/gemini-2.5-pro"
 DEFAULT_SEARCH_QUERY_MODEL = "google/gemini-2.5-flash"
-DEFAULT_SEARCH_QUERY_MODEL = "google/gemini-2.5-flash"
+
+# Default enabled providers
+DEFAULT_ENABLED_PROVIDERS = {
+    "openrouter": True,
+    "ollama": False,
+    "direct": False  # Master toggle for all direct connections
+}
+
+# Default direct provider toggles (individual)
+DEFAULT_DIRECT_PROVIDER_TOGGLES = {
+    "openai": False,
+    "anthropic": False,
+    "google": False,
+    "mistral": False,
+    "deepseek": False
+}
 
 
 # Available models for selection (popular OpenRouter models)
@@ -53,8 +68,6 @@ AVAILABLE_MODELS = [
 ]
 
 
-from enum import Enum
-
 from .prompts import (
     STAGE1_PROMPT_DEFAULT,
     STAGE2_PROMPT_DEFAULT,
@@ -62,19 +75,10 @@ from .prompts import (
     SEARCH_QUERY_PROMPT_DEFAULT
 )
 
-class LLMProvider(str, Enum):
-    OPENROUTER = "openrouter"
-    OLLAMA = "ollama"
-    DIRECT = "direct"
-    HYBRID = "hybrid"
-
 class Settings(BaseModel):
     """Application settings."""
     search_provider: SearchProvider = SearchProvider.DUCKDUCKGO
-    
-    # LLM Provider settings
-    llm_provider: LLMProvider = LLMProvider.OPENROUTER
-    
+
     # API Keys
     tavily_api_key: Optional[str] = None
     brave_api_key: Optional[str] = None
@@ -84,28 +88,23 @@ class Settings(BaseModel):
     google_api_key: Optional[str] = None
     mistral_api_key: Optional[str] = None
     deepseek_api_key: Optional[str] = None
-    
-    # OpenRouter Models
-    council_models: List[str] = DEFAULT_COUNCIL_MODELS.copy()
-    chairman_model: str = DEFAULT_CHAIRMAN_MODEL
-    
+
     # Ollama Settings
     ollama_base_url: str = "http://localhost:11434"
-    ollama_council_models: List[str] = []
-    ollama_chairman_model: str = ""
 
-    # Direct Provider Settings
-    direct_council_models: List[str] = []
-    direct_chairman_model: str = ""
+    # Enabled Providers (which sources are available for council selection)
+    enabled_providers: Dict[str, bool] = DEFAULT_ENABLED_PROVIDERS.copy()
 
-    # Hybrid Settings
-    hybrid_council_models: List[str] = []
-    hybrid_chairman_model: str = ""
-    
-    # Utility Models (for search query generation and titles)
+    # Individual direct provider toggles
+    direct_provider_toggles: Dict[str, bool] = DEFAULT_DIRECT_PROVIDER_TOGGLES.copy()
+
+    # Council Configuration (unified across all providers)
+    council_models: List[str] = DEFAULT_COUNCIL_MODELS.copy()
+    chairman_model: str = DEFAULT_CHAIRMAN_MODEL
+
+    # Web Search Query Generator
     search_query_model: str = DEFAULT_SEARCH_QUERY_MODEL
-    search_query_model: str = DEFAULT_SEARCH_QUERY_MODEL
-    
+
     full_content_results: int = 3  # Number of search results to fetch full content for (0 to disable)
 
     # System Prompts
@@ -114,9 +113,6 @@ class Settings(BaseModel):
     stage3_prompt: str = STAGE3_PROMPT_DEFAULT
 
     search_query_prompt: str = SEARCH_QUERY_PROMPT_DEFAULT
-
-    class Config:
-        use_enum_values = True
 
 
 def get_settings() -> Settings:

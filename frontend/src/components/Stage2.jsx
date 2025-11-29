@@ -1,7 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import './Stage2.css';
 import StageTimer from './StageTimer';
+
+function getShortModelName(modelId) {
+  if (!modelId) return 'Unknown';
+
+  let displayName = modelId;
+  if (modelId.includes('/')) {
+    displayName = modelId.split('/')[1] || modelId;
+  } else if (modelId.includes(':')) {
+    displayName = modelId.split(':')[1] || modelId;
+  }
+  return displayName;
+}
 
 function deAnonymizeText(text, labelToModel) {
   if (!labelToModel) return text;
@@ -9,7 +21,7 @@ function deAnonymizeText(text, labelToModel) {
   let result = text;
   // Replace each "Response X" with the actual model name
   Object.entries(labelToModel).forEach(([label, model]) => {
-    const modelShortName = model.split('/')[1] || model;
+    const modelShortName = getShortModelName(model);
     result = result.replace(new RegExp(label, 'g'), `**${modelShortName}**`);
   });
   return result;
@@ -18,12 +30,21 @@ function deAnonymizeText(text, labelToModel) {
 export default function Stage2({ rankings, labelToModel, aggregateRankings, startTime, endTime }) {
   const [activeTab, setActiveTab] = useState(0);
 
+  // Reset activeTab if it becomes out of bounds (e.g., during streaming)
+  useEffect(() => {
+    if (rankings && rankings.length > 0 && activeTab >= rankings.length) {
+      setActiveTab(rankings.length - 1);
+    }
+  }, [rankings, activeTab]);
+
   if (!rankings || rankings.length === 0) {
     return null;
   }
 
-  const currentRanking = rankings[activeTab];
-  const hasError = currentRanking?.error;
+  // Ensure activeTab is within bounds
+  const safeActiveTab = Math.min(activeTab, rankings.length - 1);
+  const currentRanking = rankings[safeActiveTab] || {};
+  const hasError = currentRanking?.error || false;
 
   return (
     <div className="stage stage2">
@@ -42,19 +63,19 @@ export default function Stage2({ rankings, labelToModel, aggregateRankings, star
         {rankings.map((rank, index) => (
           <button
             key={index}
-            className={`tab ${activeTab === index ? 'active' : ''} ${rank.error ? 'tab-error' : ''}`}
+            className={`tab ${safeActiveTab === index ? 'active' : ''} ${rank?.error ? 'tab-error' : ''}`}
             onClick={() => setActiveTab(index)}
-            title={rank.error ? rank.error_message : ''}
+            title={rank?.error ? rank.error_message : ''}
           >
-            {rank.error && <span className="error-indicator">!</span>}
-            {rank.model.split('/')[1] || rank.model}
+            {rank?.error && <span className="error-indicator">!</span>}
+            {getShortModelName(rank?.model)}
           </button>
         ))}
       </div>
 
       <div className="tab-content">
         <div className="ranking-model">
-          {currentRanking.model}
+          {currentRanking?.model || 'Unknown Model'}
           {hasError && <span className="model-status error">Failed</span>}
           {!hasError && <span className="model-status success">Success</span>}
         </div>
@@ -63,18 +84,22 @@ export default function Stage2({ rankings, labelToModel, aggregateRankings, star
             <div className="error-icon">!</div>
             <div className="error-details">
               <div className="error-title">Model Failed to Respond</div>
-              <div className="error-message">{currentRanking.error_message}</div>
+              <div className="error-message">{currentRanking?.error_message || 'Unknown error'}</div>
             </div>
           </div>
         ) : (
           <>
             <div className="ranking-content markdown-content">
               <ReactMarkdown>
-                {deAnonymizeText(currentRanking.ranking, labelToModel)}
+                {(() => {
+                  const ranking = currentRanking?.ranking;
+                  const rankingText = typeof ranking === 'string' ? ranking : String(ranking || '');
+                  return deAnonymizeText(rankingText, labelToModel);
+                })()}
               </ReactMarkdown>
             </div>
 
-            {currentRanking.parsed_ranking &&
+            {currentRanking?.parsed_ranking &&
               currentRanking.parsed_ranking.length > 0 && (
                 <div className="parsed-ranking">
                   <strong>Extracted Ranking:</strong>
@@ -82,7 +107,7 @@ export default function Stage2({ rankings, labelToModel, aggregateRankings, star
                     {currentRanking.parsed_ranking.map((label, i) => (
                       <li key={i}>
                         {labelToModel && labelToModel[label]
-                          ? labelToModel[label].split('/')[1] || labelToModel[label]
+                          ? getShortModelName(labelToModel[label])
                           : label}
                       </li>
                     ))}
@@ -104,7 +129,7 @@ export default function Stage2({ rankings, labelToModel, aggregateRankings, star
               <div key={index} className="aggregate-item">
                 <span className="rank-position">#{index + 1}</span>
                 <span className="rank-model">
-                  {agg.model.split('/')[1] || agg.model}
+                  {getShortModelName(agg.model)}
                 </span>
                 <span className="rank-score">
                   Avg: {agg.average_rank.toFixed(2)}

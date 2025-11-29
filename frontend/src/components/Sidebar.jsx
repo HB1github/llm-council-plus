@@ -8,6 +8,8 @@ export default function Sidebar({
   onNewConversation,
   onDeleteConversation,
   onOpenSettings,
+  isLoading,
+  onAbort,
 }) {
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
@@ -28,10 +30,14 @@ export default function Sidebar({
   };
 
   return (
-    <div className="sidebar">
+    <div className={`sidebar ${isLoading ? 'disabled' : ''}`}>
       <div className="sidebar-header">
         <h1>LLM Council <span className="plus-text">Plus</span></h1>
-        <button className="new-conversation-btn" onClick={onNewConversation}>
+        <button
+          className="new-conversation-btn"
+          onClick={onNewConversation}
+          disabled={isLoading}
+        >
           + New Conversation
         </button>
       </div>
@@ -44,8 +50,8 @@ export default function Sidebar({
             <div
               key={conv.id}
               className={`conversation-item ${conv.id === currentConversationId ? 'active' : ''
-                }`}
-              onClick={() => onSelectConversation(conv.id)}
+                } ${isLoading ? 'disabled' : ''}`}
+              onClick={() => !isLoading && onSelectConversation(conv.id)}
             >
               <div className="conversation-content">
                 <div className="conversation-title">
@@ -57,8 +63,9 @@ export default function Sidebar({
               </div>
               <button
                 className="delete-btn"
-                onClick={(e) => handleDeleteClick(e, conv.id)}
+                onClick={(e) => !isLoading && handleDeleteClick(e, conv.id)}
                 title="Delete conversation"
+                disabled={isLoading}
               >
                 &times;
               </button>
@@ -68,10 +75,26 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-footer">
-        <button className="settings-btn" onClick={onOpenSettings}>
+        <button
+          className="settings-btn"
+          onClick={onOpenSettings}
+          disabled={isLoading}
+        >
           Settings
         </button>
       </div>
+
+      {/* Overlay when query is running */}
+      {isLoading && (
+        <div className="sidebar-overlay">
+          <div className="sidebar-overlay-content">
+            <p>Navigation disabled while query is running.</p>
+            <button className="sidebar-stop-btn" onClick={onAbort}>
+              Stop
+            </button>
+          </div>
+        </div>
+      )}
 
       {deleteConfirmId && (
         <div className="modal-overlay" onClick={cancelDelete}>
