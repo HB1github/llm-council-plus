@@ -10,15 +10,15 @@ from .search import SearchProvider
 # Settings file path
 SETTINGS_FILE = Path(__file__).parent.parent / "data" / "settings.json"
 
-# Default models
+# Default models (matches original llm-council defaults)
 DEFAULT_COUNCIL_MODELS = [
-    "openai/gpt-4.1",
-    "google/gemini-2.5-pro",
-    "anthropic/claude-sonnet-4",
-    "x-ai/grok-3",
+    "openai/gpt-5.1",
+    "google/gemini-3-pro-preview",
+    "anthropic/claude-sonnet-4.5",
+    "x-ai/grok-4",
 ]
-DEFAULT_CHAIRMAN_MODEL = "google/gemini-2.5-pro"
-DEFAULT_SEARCH_QUERY_MODEL = "google/gemini-2.5-flash"
+DEFAULT_CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
+DEFAULT_SEARCH_QUERY_MODEL = "google/gemini-2.0-flash-lite"
 
 # Default enabled providers
 DEFAULT_ENABLED_PROVIDERS = {

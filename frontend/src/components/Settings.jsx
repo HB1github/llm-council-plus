@@ -483,6 +483,13 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
       setFullContentResults(3);
       setShowFreeOnly(false);
 
+      // Enabled Providers (auto-enable OpenRouter for default models)
+      setEnabledProviders(defaults.enabled_providers || {
+        openrouter: true,
+        ollama: false,
+        direct: false
+      });
+
       // Council Configuration (unified)
       setCouncilModels(defaults.council_models);
       setChairmanModel(defaults.chairman_model);

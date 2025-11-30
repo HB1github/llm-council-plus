@@ -372,11 +372,12 @@ async def get_default_settings():
         TITLE_PROMPT_DEFAULT,
         SEARCH_QUERY_PROMPT_DEFAULT
     )
-    from .settings import DEFAULT_SEARCH_QUERY_MODEL
+    from .settings import DEFAULT_SEARCH_QUERY_MODEL, DEFAULT_ENABLED_PROVIDERS
     return {
         "council_models": DEFAULT_COUNCIL_MODELS,
         "chairman_model": DEFAULT_CHAIRMAN_MODEL,
         "search_query_model": DEFAULT_SEARCH_QUERY_MODEL,
+        "enabled_providers": DEFAULT_ENABLED_PROVIDERS,
         "stage1_prompt": STAGE1_PROMPT_DEFAULT,
         "stage2_prompt": STAGE2_PROMPT_DEFAULT,
         "stage3_prompt": STAGE3_PROMPT_DEFAULT,
