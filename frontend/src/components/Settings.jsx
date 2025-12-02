@@ -1518,6 +1518,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama }) {
                                               onChange={e => handleCouncilModelChange(index, e.target.value)}
                                               className="model-select"
                                             >
+                                              <option value="">Select a model</option>
                                               {renderModelOptions(filterByRemoteLocal(getFilteredAvailableModels(), memberFilter))}
                                               {/* Keep current selection visible even if filtered out */}
                                               {!filterByRemoteLocal(getFilteredAvailableModels(), memberFilter).find(m => m.id === modelId) && (
