@@ -78,6 +78,7 @@ from .prompts import (
 class Settings(BaseModel):
     """Application settings."""
     search_provider: SearchProvider = SearchProvider.DUCKDUCKGO
+    search_keyword_extraction: str = "direct"  # "direct" or "yake"
 
     # API Keys
     tavily_api_key: Optional[str] = None
@@ -92,6 +93,11 @@ class Settings(BaseModel):
 
     # Ollama Settings
     ollama_base_url: str = "http://localhost:11434"
+
+    # Custom OpenAI-compatible endpoint
+    custom_endpoint_name: Optional[str] = None
+    custom_endpoint_url: Optional[str] = None
+    custom_endpoint_api_key: Optional[str] = None
 
     # Enabled Providers (which sources are available for council selection)
     enabled_providers: Dict[str, bool] = DEFAULT_ENABLED_PROVIDERS.copy()
@@ -114,6 +120,7 @@ class Settings(BaseModel):
     search_query_filter: Optional[str] = None
 
     full_content_results: int = 3  # Number of search results to fetch full content for (0 to disable)
+    show_free_only: bool = False  # Filter to show only free OpenRouter models
 
     # System Prompts
     stage1_prompt: str = STAGE1_PROMPT_DEFAULT

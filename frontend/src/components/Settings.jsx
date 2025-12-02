@@ -1,6 +1,26 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
+import SearchableModelSelect from './SearchableModelSelect';
 import './Settings.css';
+
+// Provider icons
+import openrouterIcon from '../assets/icons/openrouter.svg';
+import groqIcon from '../assets/icons/groq.svg';
+import ollamaIcon from '../assets/icons/ollama.svg';
+import openaiIcon from '../assets/icons/openai.svg';
+import anthropicIcon from '../assets/icons/anthropic.svg';
+import googleIcon from '../assets/icons/google.svg';
+import mistralIcon from '../assets/icons/mistral.svg';
+import deepseekIcon from '../assets/icons/deepseek.svg';
+import customEndpointIcon from '../assets/icons/openai-compatible.svg';
+
+const PROVIDER_ICONS = {
+  openai: openaiIcon,
+  anthropic: anthropicIcon,
+  google: googleIcon,
+  mistral: mistralIcon,
+  deepseek: deepseekIcon,
+};
 
 const SEARCH_PROVIDERS = [
   {
@@ -39,6 +59,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
 
   const [settings, setSettings] = useState(null);
   const [selectedSearchProvider, setSelectedSearchProvider] = useState('duckduckgo');
+  const [searchKeywordExtraction, setSearchKeywordExtraction] = useState('direct');
   const [fullContentResults, setFullContentResults] = useState(3);
 
   // OpenRouter State
@@ -57,6 +78,14 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
   const [ollamaAvailableModels, setOllamaAvailableModels] = useState([]);
   const [isTestingOllama, setIsTestingOllama] = useState(false);
   const [ollamaTestResult, setOllamaTestResult] = useState(null);
+
+  // Custom OpenAI-compatible Endpoint State
+  const [customEndpointName, setCustomEndpointName] = useState('');
+  const [customEndpointUrl, setCustomEndpointUrl] = useState('');
+  const [customEndpointApiKey, setCustomEndpointApiKey] = useState('');
+  const [customEndpointModels, setCustomEndpointModels] = useState([]);
+  const [isTestingCustomEndpoint, setIsTestingCustomEndpoint] = useState(false);
+  const [customEndpointTestResult, setCustomEndpointTestResult] = useState(null);
 
   // Direct Provider State
   const [directKeys, setDirectKeys] = useState({
@@ -140,7 +169,9 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
 
     const checkChanges = () => {
       if (selectedSearchProvider !== settings.search_provider) return true;
+      if (searchKeywordExtraction !== (settings.search_keyword_extraction || 'direct')) return true;
       if (fullContentResults !== (settings.full_content_results ?? 3)) return true;
+      if (showFreeOnly !== (settings.show_free_only ?? false)) return true;
 
       // Enabled Providers
       if (JSON.stringify(enabledProviders) !== JSON.stringify(settings.enabled_providers)) return true;
@@ -170,7 +201,9 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
   }, [
     settings,
     selectedSearchProvider,
+    searchKeywordExtraction,
     fullContentResults,
+    showFreeOnly,
     enabledProviders,
     directProviderToggles,
     councilModels,
@@ -233,7 +266,9 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
       setSettings(data);
 
       setSelectedSearchProvider(data.search_provider || 'duckduckgo');
+      setSearchKeywordExtraction(data.search_keyword_extraction || 'direct');
       setFullContentResults(data.full_content_results ?? 3);
+      setShowFreeOnly(data.show_free_only ?? false);
 
       // Enabled Providers - use saved settings if available, otherwise auto-enable based on configured keys
       if (data.enabled_providers) {
@@ -283,6 +318,11 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
       // Ollama Settings
       setOllamaBaseUrl(data.ollama_base_url || 'http://localhost:11434');
 
+      // Custom Endpoint Settings
+      if (data.custom_endpoint_name) setCustomEndpointName(data.custom_endpoint_name);
+      if (data.custom_endpoint_url) setCustomEndpointUrl(data.custom_endpoint_url);
+      // API key is not sent to frontend for security, similar to other keys
+
       // Prompts
       setPrompts({
         stage1_prompt: data.stage1_prompt || '',
@@ -304,6 +344,9 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
       // Load available models in background
       loadModels();
       loadOllamaModels(data.ollama_base_url || 'http://localhost:11434');
+      if (data.custom_endpoint_url) {
+        loadCustomEndpointModels();
+      }
 
     } catch (err) {
       console.error("Error loading settings:", err);
@@ -351,6 +394,48 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
     }
   };
 
+  const loadCustomEndpointModels = async () => {
+    try {
+      const data = await api.getCustomEndpointModels();
+      if (data.models && data.models.length > 0) {
+        const sorted = data.models.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        setCustomEndpointModels(sorted);
+      }
+    } catch (err) {
+      console.warn('Failed to load custom endpoint models:', err);
+    }
+  };
+
+  const handleTestCustomEndpoint = async () => {
+    if (!customEndpointName || !customEndpointUrl) {
+      setCustomEndpointTestResult({ success: false, message: 'Please enter a name and URL' });
+      return;
+    }
+    setIsTestingCustomEndpoint(true);
+    setCustomEndpointTestResult(null);
+    try {
+      const result = await api.testCustomEndpoint(customEndpointName, customEndpointUrl, customEndpointApiKey);
+      setCustomEndpointTestResult(result);
+
+      // Auto-save if connection succeeds
+      if (result.success) {
+        await api.updateSettings({
+          custom_endpoint_name: customEndpointName,
+          custom_endpoint_url: customEndpointUrl,
+          custom_endpoint_api_key: customEndpointApiKey || null
+        });
+        // Reload settings to get the updated state
+        const updatedSettings = await api.getSettings();
+        setSettings(updatedSettings);
+        // Load models from the new endpoint
+        loadCustomEndpointModels();
+      }
+    } catch (err) {
+      setCustomEndpointTestResult({ success: false, message: err.message });
+    } finally {
+      setIsTestingCustomEndpoint(false);
+    }
+  };
 
   const handleTestTavily = async () => {
     if (!tavilyApiKey) {
@@ -761,6 +846,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
 
       // 3. General Settings Defaults
       setSelectedSearchProvider('duckduckgo');
+      setSearchKeywordExtraction('direct');
       setFullContentResults(3);
       setShowFreeOnly(false);
       setOllamaBaseUrl('http://localhost:11434');
@@ -952,7 +1038,9 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
     try {
       const updates = {
         search_provider: selectedSearchProvider,
+        search_keyword_extraction: searchKeywordExtraction,
         full_content_results: fullContentResults,
+        show_free_only: showFreeOnly,
 
         // Enabled Providers
         enabled_providers: enabledProviders,
@@ -1055,6 +1143,11 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
         return individualToggleEnabled && providerConfigured;
       });
       models.push(...filteredDirectModels);
+    }
+
+    // Add custom endpoint models if configured
+    if (customEndpointModels.length > 0) {
+      models.push(...customEndpointModels);
     }
 
     // Deduplicate by model ID (prefer direct connections over OpenRouter for same model)
@@ -1213,7 +1306,10 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
 
                 {/* OpenRouter */}
                 <form className="api-key-section" onSubmit={e => e.preventDefault()}>
-                  <label>OpenRouter API Key</label>
+                  <label>
+                    <img src={openrouterIcon} alt="" className="provider-icon" />
+                    OpenRouter API Key
+                  </label>
                   <div className="api-key-input-row">
                     <input
                       type="password"
@@ -1248,7 +1344,10 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
 
                 {/* Groq */}
                 <form className="api-key-section" onSubmit={e => e.preventDefault()}>
-                  <label>Groq API Key</label>
+                  <label>
+                    <img src={groqIcon} alt="" className="provider-icon" />
+                    Groq API Key
+                  </label>
                   <div className="api-key-input-row">
                     <input
                       type="password"
@@ -1283,7 +1382,10 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
 
                 {/* Ollama */}
                 <form className="api-key-section" onSubmit={e => e.preventDefault()}>
-                  <label>Ollama Base URL</label>
+                  <label>
+                    <img src={ollamaIcon} alt="" className="provider-icon" />
+                    Ollama Base URL
+                  </label>
                   <div className="api-key-input-row">
                     <input
                       type="text"
@@ -1337,7 +1439,10 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
                   <h4>Direct LLM Connections</h4>
                   {DIRECT_PROVIDERS.map(dp => (
                     <form key={dp.id} className="api-key-section" onSubmit={e => e.preventDefault()}>
-                      <label>{dp.name} API Key</label>
+                      <label>
+                        <img src={PROVIDER_ICONS[dp.id]} alt="" className="provider-icon" />
+                        {dp.name} API Key
+                      </label>
                       <div className="api-key-input-row">
                         <input
                           type="password"
@@ -1364,6 +1469,78 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
                       )}
                     </form>
                   ))}
+                </div>
+
+                {/* Custom OpenAI-compatible Endpoint */}
+                <div className="subsection" style={{ marginTop: '24px' }}>
+                  <h4>Custom OpenAI-Compatible Endpoint</h4>
+                  <p className="subsection-description" style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '16px' }}>
+                    Connect to any OpenAI-compatible API (Together AI, Fireworks, vLLM, LM Studio, etc.)
+                  </p>
+                  <form className="api-key-section" onSubmit={e => e.preventDefault()}>
+                    <label>
+                      <img src={customEndpointIcon} alt="" className="provider-icon" />
+                      Display Name
+                    </label>
+                    <div className="api-key-input-row">
+                      <input
+                        type="text"
+                        placeholder="e.g., Together AI, My vLLM Server"
+                        value={customEndpointName}
+                        onChange={(e) => {
+                          setCustomEndpointName(e.target.value);
+                          setCustomEndpointTestResult(null);
+                        }}
+                      />
+                    </div>
+
+                    <label style={{ marginTop: '12px' }}>Base URL</label>
+                    <div className="api-key-input-row">
+                      <input
+                        type="text"
+                        placeholder="https://api.together.xyz/v1"
+                        value={customEndpointUrl}
+                        onChange={(e) => {
+                          setCustomEndpointUrl(e.target.value);
+                          setCustomEndpointTestResult(null);
+                        }}
+                      />
+                    </div>
+
+                    <label style={{ marginTop: '12px' }}>API Key <span style={{ fontWeight: 'normal', opacity: 0.7 }}>(optional for local servers)</span></label>
+                    <div className="api-key-input-row">
+                      <input
+                        type="password"
+                        placeholder={settings?.custom_endpoint_url ? '••••••••••••••••' : 'Enter API key'}
+                        value={customEndpointApiKey}
+                        onChange={(e) => {
+                          setCustomEndpointApiKey(e.target.value);
+                          setCustomEndpointTestResult(null);
+                        }}
+                      />
+                      <button
+                        className="test-button"
+                        onClick={handleTestCustomEndpoint}
+                        disabled={!customEndpointName || !customEndpointUrl || isTestingCustomEndpoint}
+                      >
+                        {isTestingCustomEndpoint ? 'Testing...' : 'Connect'}
+                      </button>
+                    </div>
+
+                    {settings?.custom_endpoint_url && !customEndpointUrl && (
+                      <div className="key-status set">✓ Endpoint configured: {settings.custom_endpoint_name}</div>
+                    )}
+                    {customEndpointTestResult && (
+                      <div className={`test-result ${customEndpointTestResult.success ? 'success' : 'error'}`}>
+                        {customEndpointTestResult.message}
+                      </div>
+                    )}
+                    {customEndpointModels.length > 0 && (
+                      <p className="api-key-hint" style={{ marginTop: '8px' }}>
+                        {customEndpointModels.length} models available from {settings?.custom_endpoint_name || customEndpointName}
+                      </p>
+                    )}
+                  </form>
                 </div>
               </section>
             )}
@@ -1549,21 +1726,17 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
                                 Local
                               </button>
                             </div>
-                            <select
-                              value={modelId}
-                              onChange={e => handleCouncilModelChange(index, e.target.value)}
-                              className="model-select"
-                              disabled={isLoadingModels && availableModels.length === 0}
-                            >
-                              <option value="">{isLoadingModels && availableModels.length === 0 ? "Loading models..." : "Select a model"}</option>
-                              {renderModelOptions(filterByRemoteLocal(getFilteredAvailableModels(), memberFilter))}
-                              {/* Keep current selection visible even if filtered out */}
-                              {!filterByRemoteLocal(getFilteredAvailableModels(), memberFilter).find(m => m.id === modelId) && modelId && (
-                                <option value={modelId}>
-                                  {isLoadingModels ? "Loading model info..." : (getAllAvailableModels().find(m => m.id === modelId)?.name || modelId)}
-                                </option>
-                              )}
-                            </select>
+                            <div className="model-select-wrapper">
+                              <SearchableModelSelect
+                                models={filterByRemoteLocal(getFilteredAvailableModels(), memberFilter)}
+                                value={modelId}
+                                onChange={(value) => handleCouncilModelChange(index, value)}
+                                placeholder={isLoadingModels && availableModels.length === 0 ? "Loading models..." : "Search models..."}
+                                isDisabled={isLoadingModels && availableModels.length === 0}
+                                isLoading={isLoadingModels}
+                                allModels={getAllAvailableModels()}
+                              />
+                            </div>
                             {index >= 2 && (
                               <button
                                 type="button"
@@ -1677,14 +1850,14 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
                       </div>
                     </div>
                     <div className="chairman-selection">
-                      <select
+                      <SearchableModelSelect
+                        models={filterByRemoteLocal(getFilteredAvailableModels(), chairmanFilter)}
                         value={chairmanModel}
-                        onChange={(e) => setChairmanModel(e.target.value)}
-                        className="model-select"
-                      >
-                        <option value="">Select a model</option>
-                        {renderModelOptions(filterByRemoteLocal(getFilteredAvailableModels(), chairmanFilter))}
-                      </select>
+                        onChange={(value) => setChairmanModel(value)}
+                        placeholder="Search models..."
+                        isLoading={isLoadingModels}
+                        allModels={getAllAvailableModels()}
+                      />
                     </div>
 
                     {/* Chairman Heat Slider */}
@@ -1931,6 +2104,51 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
                       className="full-content-slider"
                     />
                     <span className="full-content-value">{fullContentResults} results</span>
+                  </div>
+                </div>
+
+                <div className="keyword-extraction-section" style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <label>Search Query Processing</label>
+                  <p className="setting-description">
+                    Choose how your prompt is sent to the search engine.
+                  </p>
+
+                  <div className="provider-options">
+                    <div className={`provider-option-container ${searchKeywordExtraction === 'direct' ? 'selected' : ''}`}>
+                      <label className="provider-option">
+                        <input
+                          type="radio"
+                          name="keyword_extraction"
+                          value="direct"
+                          checked={searchKeywordExtraction === 'direct'}
+                          onChange={() => setSearchKeywordExtraction('direct')}
+                        />
+                        <div className="provider-info">
+                          <span className="provider-name">Direct (Recommended)</span>
+                          <span className="provider-description">
+                            Send your exact query to the search engine. Best for modern semantic search engines like Tavily and Brave.
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className={`provider-option-container ${searchKeywordExtraction === 'yake' ? 'selected' : ''}`}>
+                      <label className="provider-option">
+                        <input
+                          type="radio"
+                          name="keyword_extraction"
+                          value="yake"
+                          checked={searchKeywordExtraction === 'yake'}
+                          onChange={() => setSearchKeywordExtraction('yake')}
+                        />
+                        <div className="provider-info">
+                          <span className="provider-name">Smart Keywords (Yake)</span>
+                          <span className="provider-description">
+                            Extract key terms from your prompt before searching. Useful if you paste very long prompts that confuse the search engine.
+                          </span>
+                        </div>
+                      </label>
+                    </div>
                   </div>
                 </div>
               </section>

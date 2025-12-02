@@ -20,6 +20,7 @@ from .providers.deepseek import DeepSeekProvider
 from .providers.openrouter import OpenRouterProvider
 from .providers.ollama import OllamaProvider
 from .providers.groq import GroqProvider
+from .providers.custom_openai import CustomOpenAIProvider
 
 # Initialize providers
 PROVIDERS = {
@@ -31,6 +32,7 @@ PROVIDERS = {
     "groq": GroqProvider(),
     "openrouter": OpenRouterProvider(),
     "ollama": OllamaProvider(),
+    "custom": CustomOpenAIProvider(),
 }
 
 def get_provider_for_model(model_id: str) -> Any:

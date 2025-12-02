@@ -177,6 +177,34 @@ export const api = {
   },
 
   /**
+   * Test custom OpenAI-compatible endpoint.
+   */
+  async testCustomEndpoint(name, url, apiKey) {
+    const response = await fetch(`${API_BASE}/api/settings/test-custom-endpoint`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name, url, api_key: apiKey }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to test custom endpoint');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get available models from custom endpoint.
+   */
+  async getCustomEndpointModels() {
+    const response = await fetch(`${API_BASE}/api/custom-endpoint/models`);
+    if (!response.ok) {
+      throw new Error('Failed to get custom endpoint models');
+    }
+    return response.json();
+  },
+
+  /**
    * Get available models from OpenRouter.
    */
   async getModels() {
@@ -255,14 +283,16 @@ export const api = {
   async sendMessageStream(conversationId, options, onEvent, signal) {
     const { content, webSearch = false, executionMode = 'full' } = options;
     const response = await fetch(
-      `${API_BASE}/api/conversations/${conversationId}/message/stream`,
+      `${API_BASE}/api/conversations/${conversationId}/message/stream?_t=${Date.now()}`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
         },
         body: JSON.stringify({ content, web_search: webSearch, execution_mode: executionMode }),
         signal,
+        cache: 'no-store',
       }
     );
 

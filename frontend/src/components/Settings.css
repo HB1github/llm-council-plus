@@ -280,11 +280,19 @@
 }
 
 .api-key-section label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14px;
   font-weight: 500;
   color: #e5e7eb;
   margin-bottom: 8px;
+}
+
+.provider-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 }
 
 .api-key-input-row {
@@ -740,6 +748,11 @@
   outline: none;
   border-color: #4a90e2;
   box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+}
+
+.model-select-wrapper {
+  flex: 1;
+  min-width: 0;
 }
 
 .remove-member-button {

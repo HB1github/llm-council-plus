@@ -163,7 +163,13 @@ async def send_message_stream(conversation_id: str, body: SendMessageRequest, re
                     raise asyncio.CancelledError("Client disconnected")
 
                 # Run search (now fully async for Tavily/Brave, threaded only for DuckDuckGo)
-                search_result = await perform_web_search(search_query, 5, provider, settings.full_content_results)
+                search_result = await perform_web_search(
+                    search_query, 
+                    5, 
+                    provider, 
+                    settings.full_content_results,
+                    settings.search_keyword_extraction
+                )
                 search_context = search_result["results"]
                 extracted_query = search_result["extracted_query"]
                 yield f"data: {json.dumps({'type': 'search_complete', 'data': {'search_query': search_query, 'extracted_query': extracted_query, 'search_context': search_context, 'provider': provider.value}})}\n\n"
@@ -302,6 +308,7 @@ async def send_message_stream(conversation_id: str, body: SendMessageRequest, re
 class UpdateSettingsRequest(BaseModel):
     """Request to update settings."""
     search_provider: Optional[str] = None
+    search_keyword_extraction: Optional[str] = None
     ollama_base_url: Optional[str] = None
     full_content_results: Optional[int] = None
 
@@ -349,8 +356,14 @@ async def get_app_settings():
     settings = get_settings()
     return {
         "search_provider": settings.search_provider,
+        "search_keyword_extraction": settings.search_keyword_extraction,
         "ollama_base_url": settings.ollama_base_url,
         "full_content_results": settings.full_content_results,
+
+        # Custom Endpoint
+        "custom_endpoint_name": settings.custom_endpoint_name,
+        "custom_endpoint_url": settings.custom_endpoint_url,
+        # Don't send the API key to frontend for security
 
         # API Key Status
         "tavily_api_key_set": bool(settings.tavily_api_key),
@@ -362,6 +375,7 @@ async def get_app_settings():
         "mistral_api_key_set": bool(settings.mistral_api_key),
         "deepseek_api_key_set": bool(settings.deepseek_api_key),
         "groq_api_key_set": bool(settings.groq_api_key),
+        "custom_endpoint_api_key_set": bool(settings.custom_endpoint_api_key),
 
         # Enabled Providers
         "enabled_providers": settings.enabled_providers,
@@ -418,6 +432,14 @@ async def update_app_settings(request: UpdateSettingsRequest):
                 status_code=400,
                 detail=f"Invalid search provider. Must be one of: {[p.value for p in SearchProvider]}"
             )
+
+    if request.search_keyword_extraction is not None:
+        if request.search_keyword_extraction not in ["direct", "yake"]:
+             raise HTTPException(
+                status_code=400,
+                detail="Invalid keyword extraction mode. Must be 'direct' or 'yake'"
+            )
+        updates["search_keyword_extraction"] = request.search_keyword_extraction
 
     if request.ollama_base_url is not None:
         updates["ollama_base_url"] = request.ollama_base_url
@@ -516,8 +538,13 @@ async def update_app_settings(request: UpdateSettingsRequest):
 
     return {
         "search_provider": settings.search_provider,
+        "search_keyword_extraction": settings.search_keyword_extraction,
         "ollama_base_url": settings.ollama_base_url,
         "full_content_results": settings.full_content_results,
+
+        # Custom Endpoint
+        "custom_endpoint_name": settings.custom_endpoint_name,
+        "custom_endpoint_url": settings.custom_endpoint_url,
 
         # API Key Status
         "tavily_api_key_set": bool(settings.tavily_api_key),
@@ -529,6 +556,7 @@ async def update_app_settings(request: UpdateSettingsRequest):
         "mistral_api_key_set": bool(settings.mistral_api_key),
         "deepseek_api_key_set": bool(settings.deepseek_api_key),
         "groq_api_key_set": bool(settings.groq_api_key),
+        "custom_endpoint_api_key_set": bool(settings.custom_endpoint_api_key),
 
         # Enabled Providers
         "enabled_providers": settings.enabled_providers,
@@ -537,7 +565,7 @@ async def update_app_settings(request: UpdateSettingsRequest):
         # Council Configuration (unified)
         "council_models": settings.council_models,
         "chairman_model": settings.chairman_model,
-        
+
         # Remote/Local filters
         "council_member_filters": settings.council_member_filters,
         "chairman_filter": settings.chairman_filter,
@@ -725,6 +753,37 @@ async def test_ollama_connection(request: TestOllamaRequest):
         return {"success": False, "message": "Could not connect to Ollama. Is it running at this URL?"}
     except Exception as e:
         return {"success": False, "message": str(e)}
+
+
+class TestCustomEndpointRequest(BaseModel):
+    """Request to test custom OpenAI-compatible endpoint."""
+    name: str
+    url: str
+    api_key: Optional[str] = None
+
+
+@app.post("/api/settings/test-custom-endpoint")
+async def test_custom_endpoint(request: TestCustomEndpointRequest):
+    """Test connection to a custom OpenAI-compatible endpoint."""
+    from .providers.custom_openai import CustomOpenAIProvider
+
+    provider = CustomOpenAIProvider()
+    return await provider.validate_connection(request.url, request.api_key or "")
+
+
+@app.get("/api/custom-endpoint/models")
+async def get_custom_endpoint_models():
+    """Fetch available models from the custom endpoint."""
+    from .providers.custom_openai import CustomOpenAIProvider
+    from .settings import get_settings
+
+    settings = get_settings()
+    if not settings.custom_endpoint_url:
+        return {"models": [], "error": "No custom endpoint configured"}
+
+    provider = CustomOpenAIProvider()
+    models = await provider.get_models()
+    return {"models": models}
 
 
 @app.get("/api/models")
