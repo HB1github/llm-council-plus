@@ -106,8 +106,20 @@ export default function CouncilGrid({
     // Helper to get chairman info
     const chairmanInfo = chairman ? getProviderInfo(chairman) : null;
 
+    // Calculate grid layout based on member count
+    const memberCount = displayModels.length;
+    let gridClass = 'council-grid';
+
+    if (memberCount <= 3) {
+        gridClass += ' grid-single-row'; // 1 row layout
+    } else if (memberCount <= 6) {
+        gridClass += ' grid-3-cols'; // 3 members per row (max 2 rows)
+    } else {
+        gridClass += ' grid-4-cols'; // 4 members per row (max 2 rows)
+    }
+
     return (
-        <div className="council-grid">
+        <div className={gridClass}>
             {/* Tooltip Portal */}
             {tooltip.visible && createPortal(
                 <div
