@@ -154,8 +154,8 @@ async def send_message_stream(conversation_id: str, body: SendMessageRequest, re
                     print("Client disconnected during search setup")
                     raise asyncio.CancelledError("Client disconnected")
 
-                # Generate optimized search query
-                search_query = await generate_search_query(body.content)
+                # Generate search query (passthrough - no AI model needed)
+                search_query = generate_search_query(body.content)
 
                 # Check for disconnect before performing search
                 if await request.is_disconnected():
@@ -325,10 +325,6 @@ class UpdateSettingsRequest(BaseModel):
     # Remote/Local filters
     council_member_filters: Optional[Dict[int, str]] = None
     chairman_filter: Optional[str] = None
-    search_query_filter: Optional[str] = None
-
-    # Web Search Query Generator
-    search_query_model: Optional[str] = None
     
     # Execution Mode
     execution_mode: Optional[str] = None
@@ -337,7 +333,6 @@ class UpdateSettingsRequest(BaseModel):
     stage1_prompt: Optional[str] = None
     stage2_prompt: Optional[str] = None
     stage3_prompt: Optional[str] = None
-    search_query_prompt: Optional[str] = None
 
 
 
@@ -377,16 +372,11 @@ async def get_app_settings():
         # Remote/Local filters
         "council_member_filters": settings.council_member_filters,
         "chairman_filter": settings.chairman_filter,
-        "search_query_filter": settings.search_query_filter,
-
-        # Web Search Query Generator
-        "search_query_model": settings.search_query_model,
 
         # Prompts
         "stage1_prompt": settings.stage1_prompt,
         "stage2_prompt": settings.stage2_prompt,
         "stage3_prompt": settings.stage3_prompt,
-        "search_query_prompt": settings.search_query_prompt,
     }
 
 
@@ -398,19 +388,16 @@ async def get_default_settings():
         STAGE1_PROMPT_DEFAULT,
         STAGE2_PROMPT_DEFAULT,
         STAGE3_PROMPT_DEFAULT,
-        TITLE_PROMPT_DEFAULT,
-        SEARCH_QUERY_PROMPT_DEFAULT
+        TITLE_PROMPT_DEFAULT
     )
-    from .settings import DEFAULT_SEARCH_QUERY_MODEL, DEFAULT_ENABLED_PROVIDERS
+    from .settings import DEFAULT_ENABLED_PROVIDERS
     return {
         "council_models": DEFAULT_COUNCIL_MODELS,
         "chairman_model": DEFAULT_CHAIRMAN_MODEL,
-        "search_query_model": DEFAULT_SEARCH_QUERY_MODEL,
         "enabled_providers": DEFAULT_ENABLED_PROVIDERS,
         "stage1_prompt": STAGE1_PROMPT_DEFAULT,
         "stage2_prompt": STAGE2_PROMPT_DEFAULT,
         "stage3_prompt": STAGE3_PROMPT_DEFAULT,
-        "search_query_prompt": SEARCH_QUERY_PROMPT_DEFAULT,
     }
 
 
@@ -449,8 +436,6 @@ async def update_app_settings(request: UpdateSettingsRequest):
         updates["stage2_prompt"] = request.stage2_prompt
     if request.stage3_prompt is not None:
         updates["stage3_prompt"] = request.stage3_prompt
-    if request.search_query_prompt is not None:
-        updates["search_query_prompt"] = request.search_query_prompt
 
     if request.tavily_api_key is not None:
         updates["tavily_api_key"] = request.tavily_api_key
@@ -511,12 +496,6 @@ async def update_app_settings(request: UpdateSettingsRequest):
         updates["council_member_filters"] = request.council_member_filters
     if request.chairman_filter is not None:
         updates["chairman_filter"] = request.chairman_filter
-    if request.search_query_filter is not None:
-        updates["search_query_filter"] = request.search_query_filter
-
-    # Web Search Query Generator
-    if request.search_query_model is not None:
-        updates["search_query_model"] = request.search_query_model
     
     # Execution Mode
     if request.execution_mode is not None:
@@ -560,16 +539,11 @@ async def update_app_settings(request: UpdateSettingsRequest):
         # Remote/Local filters
         "council_member_filters": settings.council_member_filters,
         "chairman_filter": settings.chairman_filter,
-        "search_query_filter": settings.search_query_filter,
-
-        # Web Search Query Generator
-        "search_query_model": settings.search_query_model,
 
         # Prompts
         "stage1_prompt": settings.stage1_prompt,
         "stage2_prompt": settings.stage2_prompt,
         "stage3_prompt": settings.stage3_prompt,
-        "search_query_prompt": settings.search_query_prompt,
     }
 
 

@@ -68,12 +68,3 @@ The title should be concise and descriptive. Do not use quotes or punctuation in
 Question: {user_query}
 
 Title:"""
-
-SEARCH_QUERY_PROMPT_DEFAULT = """Extract the key search terms from this question for a web search.
-Return ONLY the search terms (3-6 words), no explanation or formatting.
-Focus on the main topic, entities, and time-relevant terms.
-Remove question words and verbs like "analyze", "explain", "describe".
-
-Question: {user_query}
-
-Search terms:"""

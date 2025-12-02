@@ -511,46 +511,16 @@ async def generate_conversation_title(user_query: str) -> str:
     return title
 
 
-async def generate_search_query(user_query: str) -> str:
-    """
-    Generate optimized search terms from the user's question.
-
+def generate_search_query(user_query: str) -> str:
+    """Return user query directly for web search (passthrough).
+    
+    Modern search engines (DuckDuckGo, Brave, Tavily) handle 
+    natural language queries well without optimization.
+    
     Args:
         user_query: The user's full question
-
+    
     Returns:
-        Optimized search query string
+        User query truncated to 100 characters for safety
     """
-    settings = get_settings()
-    try:
-        # Ensure prompt is not None
-        prompt_template = settings.search_query_prompt
-        if not prompt_template:
-            from .prompts import SEARCH_QUERY_PROMPT_DEFAULT
-            prompt_template = SEARCH_QUERY_PROMPT_DEFAULT
-
-        prompt = prompt_template.format(user_query=user_query)
-    except (KeyError, AttributeError, TypeError):
-        prompt = f"Search terms for: {user_query}"
-
-    messages = [{"role": "user", "content": prompt}]
-
-    # Use configured search query model
-    model_to_use = settings.search_query_model
-
-    response = await query_model(model_to_use, messages, timeout=15.0)
-
-    if response is None:
-        # Fallback: return original query truncated
-        return user_query[:100]
-
-    search_query = response.get('content', user_query).strip()
-
-    # Clean up - remove quotes, limit length
-    search_query = search_query.strip('"\'')
-
-    # If the model returned something too short or empty, use original
-    if len(search_query) < 5:
-        return user_query[:100]
-
-    return search_query[:100]
+    return user_query[:100]  # Truncate for safety

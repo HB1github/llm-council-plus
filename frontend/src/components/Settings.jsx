@@ -101,16 +101,13 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
   const [councilModels, setCouncilModels] = useState([]);
   const [chairmanModel, setChairmanModel] = useState('');
 
-  // Web Search Query Generator
-  const [searchQueryModel, setSearchQueryModel] = useState('');
-
   // System Prompts State
   const [prompts, setPrompts] = useState({
     stage1_prompt: '',
     stage2_prompt: '',
     stage3_prompt: '',
     title_prompt: '',
-    search_query_prompt: ''
+
   });
   const [activePromptTab, setActivePromptTab] = useState('stage1');
 
@@ -122,7 +119,6 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
   const [hasChanges, setHasChanges] = useState(false);
 
   // Remote/Local filter toggles per model type
-  const [searchQueryFilter, setSearchQueryFilter] = useState('remote');  // 'remote' or 'local'
   const [councilMemberFilters, setCouncilMemberFilters] = useState({});  // Per-member filters (indexed by member index)
   const [chairmanFilter, setChairmanFilter] = useState('remote');
 
@@ -154,16 +150,10 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
       // Remote/Local filters
       if (JSON.stringify(councilMemberFilters) !== JSON.stringify(settings.council_member_filters || {})) return true;
       if (chairmanFilter !== (settings.chairman_filter || 'remote')) return true;
-      if (searchQueryFilter !== (settings.search_query_filter || 'remote')) return true;
-
-      // Web Search Query Generator
-      if (searchQueryModel !== settings.search_query_model) return true;
-
       // Prompts
       if (prompts.stage1_prompt !== settings.stage1_prompt) return true;
       if (prompts.stage2_prompt !== settings.stage2_prompt) return true;
       if (prompts.stage3_prompt !== settings.stage3_prompt) return true;
-      if (prompts.search_query_prompt !== settings.search_query_prompt) return true;
 
       // Note: API keys are auto-saved on test, so we don't check them here
 
@@ -181,8 +171,6 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
     chairmanModel,
     councilMemberFilters,
     chairmanFilter,
-    searchQueryFilter,
-    searchQueryModel,
     prompts
   ]);
 
@@ -226,13 +214,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
       setChairmanModel('');
     }
 
-    // Update Search Query Model
-    const newSearchFilter = getNewFilter(searchQueryFilter);
-    if (newSearchFilter !== searchQueryFilter) {
-      setSearchQueryFilter(newSearchFilter);
-      setSearchQueryModel('');
-    }
-  }, [enabledProviders, chairmanFilter, searchQueryFilter]);
+  }, [enabledProviders, chairmanFilter]);
 
   const loadSettings = async () => {
     try {
@@ -286,13 +268,6 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
       if (data.chairman_filter) {
         setChairmanFilter(data.chairman_filter);
       }
-      if (data.search_query_filter) {
-        setSearchQueryFilter(data.search_query_filter);
-      }
-
-      // Web Search Query Generator
-      setSearchQueryModel(data.search_query_model || 'google/gemini-2.5-flash');
-
       // Ollama Settings
       setOllamaBaseUrl(data.ollama_base_url || 'http://localhost:11434');
 
@@ -301,7 +276,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
         stage1_prompt: data.stage1_prompt || '',
         stage2_prompt: data.stage2_prompt || '',
         stage3_prompt: data.stage3_prompt || '',
-        search_query_prompt: data.search_query_prompt || ''
+
       });
 
       // Clear Direct Keys (for security)
@@ -571,11 +546,6 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
       openRouterFreeCount++;
     }
 
-    const searchQueryModelData = availableModels.find(m => m.id === searchQueryModel || m.id === searchQueryModel.replace('openrouter:', ''));
-    if (searchQueryModelData && searchQueryModelData.is_free && (!searchQueryModel.includes(':') || searchQueryModel.startsWith('openrouter:'))) {
-      openRouterFreeCount++;
-    }
-
     // Logic for OpenRouter Warnings
     // OpenRouter: 20 RPM, 50 RPD (without credits)
     if (openRouterFreeCount > 0) {
@@ -601,7 +571,6 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
       if (id.startsWith('groq:')) groqRequests += 2; // Stage 1 + Stage 2
     });
     if (chairmanModel.startsWith('groq:')) groqRequests += 1;
-    if (searchQueryModel.startsWith('groq:')) groqRequests += 1;
 
     if (groqRequests > 15) {
       return {
@@ -668,18 +637,12 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
     // 3. Randomize Chairman
     const randomChairman = pickRandom(candidateModels);
 
-    // 4. Randomize Search Query
-    const randomSearch = pickRandom(candidateModels);
-
     // Apply Updates
     setCouncilModels(newCouncilModels);
     setCouncilMemberFilters(newMemberFilters);
 
     setChairmanModel(randomChairman.id);
     setChairmanFilter(getFilterForModel(randomChairman.id));
-
-    setSearchQueryModel(randomSearch.id);
-    setSearchQueryFilter(getFilterForModel(randomSearch.id));
 
     setSuccess(true);
     setTimeout(() => setSuccess(false), 2000);
@@ -776,12 +739,10 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
       // Initialize with 4 empty slots for council
       setCouncilModels(['', '', '', '']);
       setChairmanModel('');
-      setSearchQueryModel('');
 
       // Reset filters to 'remote' default
       setCouncilMemberFilters({ 0: 'remote', 1: 'remote', 2: 'remote', 3: 'remote' });
       setChairmanFilter('remote');
-      setSearchQueryFilter('remote');
 
       // 3. General Settings Defaults
       setSelectedSearchProvider('duckduckgo');
@@ -795,7 +756,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
         stage1_prompt: defaults.stage1_prompt,
         stage2_prompt: defaults.stage2_prompt,
         stage3_prompt: defaults.stage3_prompt,
-        search_query_prompt: defaults.search_query_prompt
+
       });
 
       // 5. Save the reset settings to backend
@@ -824,7 +785,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
         stage1_prompt: defaults.stage1_prompt,
         stage2_prompt: defaults.stage2_prompt,
         stage3_prompt: defaults.stage3_prompt,
-        search_query_prompt: defaults.search_query_prompt
+
       };
       await api.updateSettings(updates);
 
@@ -898,9 +859,6 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
       // Ollama Base URL
       ollama_base_url: ollamaBaseUrl,
 
-      // Web Search Query Generator
-      search_query_model: searchQueryModel,
-
       // Prompts
       prompts: prompts
     };
@@ -941,8 +899,6 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
         if (config.ollama_base_url) setOllamaBaseUrl(config.ollama_base_url);
 
         // Apply Web Search Query Generator
-        if (config.search_query_model) setSearchQueryModel(config.search_query_model);
-
         // Apply Prompts
         if (config.prompts) {
           setPrompts(prev => ({ ...prev, ...config.prompts }));
@@ -991,11 +947,6 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
         // Remote/Local filters for each selection
         council_member_filters: councilMemberFilters,
         chairman_filter: chairmanFilter,
-        search_query_filter: searchQueryFilter,
-
-        // Web Search Query Generator
-        search_query_model: searchQueryModel,
-
         // Prompts
         ...prompts
       };
@@ -1230,14 +1181,14 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
             {/* API KEYS (LLM API Keys) */}
             {activeSection === 'llm_keys' && (
               <section className="settings-section">
-                <h3>API Credentials</h3>
+                <h3>LLM API Keys</h3>
                 <p className="section-description">
                   Configure keys for LLM providers.
                   Keys are <strong>auto-saved</strong> immediately upon successful test.
                 </p>
 
                 {/* OpenRouter */}
-                <div className="api-key-section">
+                <form className="api-key-section" onSubmit={e => e.preventDefault()}>
                   <label>OpenRouter API Key</label>
                   <div className="api-key-input-row">
                     <input
@@ -1269,10 +1220,10 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
                   <p className="api-key-hint">
                     Get key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai</a>
                   </p>
-                </div>
+                </form>
 
                 {/* Groq */}
-                <div className="api-key-section">
+                <form className="api-key-section" onSubmit={e => e.preventDefault()}>
                   <label>Groq API Key</label>
                   <div className="api-key-input-row">
                     <input
@@ -1304,10 +1255,10 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
                   <p className="api-key-hint">
                     Get key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">console.groq.com</a>
                   </p>
-                </div>
+                </form>
 
                 {/* Ollama */}
-                <div className="api-key-section">
+                <form className="api-key-section" onSubmit={e => e.preventDefault()}>
                   <label>Ollama Base URL</label>
                   <div className="api-key-input-row">
                     <input
@@ -1355,13 +1306,13 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
                       Refresh Local Models
                     </button>
                   </div>
-                </div>
+                </form>
 
                 {/* Direct LLM API Connections */}
                 <div className="subsection" style={{ marginTop: '24px' }}>
                   <h4>Direct LLM Connections</h4>
                   {DIRECT_PROVIDERS.map(dp => (
-                    <div key={dp.id} className="api-key-section">
+                    <form key={dp.id} className="api-key-section" onSubmit={e => e.preventDefault()}>
                       <label>{dp.name} API Key</label>
                       <div className="api-key-input-row">
                         <input
@@ -1387,7 +1338,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
                           {keyValidationStatus[dp.id].message}
                         </div>
                       )}
-                    </div>
+                    </form>
                   ))}
                 </div>
               </section>
@@ -1676,51 +1627,6 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
                     </div>
                   </div>
 
-                  {/* Web Search Query Generator */}
-                  <div className="subsection" style={{ marginTop: '24px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <h4 style={{ margin: 0 }}>Search Query Generator</h4>
-                      <div className="model-type-toggle">
-                        <button
-                          type="button"
-                          className={`type-btn ${searchQueryFilter === 'remote' ? 'active' : ''}`}
-                          onClick={() => {
-                            setSearchQueryFilter('remote');
-                            setSearchQueryModel('');
-                          }}
-                          disabled={!enabledProviders.openrouter && !enabledProviders.direct && !enabledProviders.groq}
-                          title={!enabledProviders.openrouter && !enabledProviders.direct && !enabledProviders.groq ? 'Enable OpenRouter, Groq, or Direct Connections first' : ''}
-                        >
-                          Remote
-                        </button>
-                        <button
-                          type="button"
-                          className={`type-btn ${searchQueryFilter === 'local' ? 'active' : ''}`}
-                          onClick={() => {
-                            setSearchQueryFilter('local');
-                            setSearchQueryModel('');
-                          }}
-                          disabled={!enabledProviders.ollama || ollamaAvailableModels.length === 0}
-                          title={!enabledProviders.ollama || ollamaAvailableModels.length === 0 ? 'Enable and connect Ollama first' : ''}
-                        >
-                          Local
-                        </button>
-                      </div>
-                    </div>
-                    <p className="section-description" style={{ marginBottom: '8px' }}>
-                      Generates optimized search terms from user questions.
-                    </p>
-                    <div className="chairman-selection">
-                      <select
-                        value={searchQueryModel}
-                        onChange={(e) => setSearchQueryModel(e.target.value)}
-                        className="model-select"
-                      >
-                        <option value="">Select a model</option>
-                        {renderModelOptions(filterByRemoteLocal(getAllAvailableModels(), searchQueryFilter))}
-                      </select>
-                    </div>
-                  </div>
                 </section>
               </>
             )}
@@ -1752,30 +1658,9 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
                   >
                     Stage 3
                   </button>
-                  <button
-                    className={`prompt-tab ${activePromptTab === 'search' ? 'active' : ''}`}
-                    onClick={() => setActivePromptTab('search')}
-                  >
-                    Search Query
-                  </button>
                 </div>
 
                 <div className="prompt-editor">
-                  {activePromptTab === 'search' && (
-                    <div className="prompt-content">
-                      <label>Search Query Generation</label>
-                      <p className="section-description" style={{ marginBottom: '10px' }}>
-                        Generates optimized search terms from user questions for web search.
-                      </p>
-                      <p className="prompt-help">Variables: <code>{'{user_query}'}</code></p>
-                      <textarea
-                        value={prompts.search_query_prompt}
-                        onChange={(e) => handlePromptChange('search_query_prompt', e.target.value)}
-                        rows={10}
-                      />
-                      <button className="reset-prompt-btn" onClick={() => handleResetPrompt('search_query_prompt')}>Reset to Default</button>
-                    </div>
-                  )}
                   {activePromptTab === 'stage1' && (
                     <div className="prompt-content">
                       <label>Stage 1: Initial Response</label>
@@ -2019,33 +1904,35 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
         </div>
       </div>
 
-      {showResetConfirm && (
-        <div className="settings-overlay confirmation-overlay" onClick={() => setShowResetConfirm(false)}>
-          <div className="settings-modal confirmation-modal" onClick={e => e.stopPropagation()}>
-            <div className="settings-header">
-              <h2>Confirm Reset</h2>
-            </div>
-            <div className="settings-content confirmation-content">
-              <p>Are you sure you want to reset to defaults?</p>
-              <div className="confirmation-details">
-                <p><strong>This will reset:</strong></p>
-                <ul>
-                  <li>All model selections</li>
-                  <li>System prompts</li>
-                  <li>General settings</li>
-                </ul>
-                <p className="confirmation-safe">✓ API keys will be PRESERVED</p>
+      {
+        showResetConfirm && (
+          <div className="settings-overlay confirmation-overlay" onClick={() => setShowResetConfirm(false)}>
+            <div className="settings-modal confirmation-modal" onClick={e => e.stopPropagation()}>
+              <div className="settings-header">
+                <h2>Confirm Reset</h2>
               </div>
-            </div>
-            <div className="settings-footer">
-              <div className="footer-actions" style={{ width: '100%', justifyContent: 'flex-end' }}>
-                <button className="cancel-button" onClick={() => setShowResetConfirm(false)}>Cancel</button>
-                <button className="reset-button" onClick={confirmResetToDefaults}>Confirm Reset</button>
+              <div className="settings-content confirmation-content">
+                <p>Are you sure you want to reset to defaults?</p>
+                <div className="confirmation-details">
+                  <p><strong>This will reset:</strong></p>
+                  <ul>
+                    <li>All model selections</li>
+                    <li>System prompts</li>
+                    <li>General settings</li>
+                  </ul>
+                  <p className="confirmation-safe">✓ API keys will be PRESERVED</p>
+                </div>
+              </div>
+              <div className="settings-footer">
+                <div className="footer-actions" style={{ width: '100%', justifyContent: 'flex-end' }}>
+                  <button className="cancel-button" onClick={() => setShowResetConfirm(false)}>Cancel</button>
+                  <button className="reset-button" onClick={confirmResetToDefaults}>Confirm Reset</button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }

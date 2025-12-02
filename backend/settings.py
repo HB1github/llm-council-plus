@@ -18,7 +18,6 @@ DEFAULT_COUNCIL_MODELS = [
     "mistralai/mistral-large",
 ]
 DEFAULT_CHAIRMAN_MODEL = "openai/gpt-4o"
-DEFAULT_SEARCH_QUERY_MODEL = "google/gemini-1.5-flash"
 
 # Default enabled providers
 DEFAULT_ENABLED_PROVIDERS = {
@@ -73,8 +72,7 @@ AVAILABLE_MODELS = [
 from .prompts import (
     STAGE1_PROMPT_DEFAULT,
     STAGE2_PROMPT_DEFAULT,
-    STAGE3_PROMPT_DEFAULT,
-    SEARCH_QUERY_PROMPT_DEFAULT
+    STAGE3_PROMPT_DEFAULT
 )
 
 class Settings(BaseModel):
@@ -110,17 +108,12 @@ class Settings(BaseModel):
     chairman_filter: Optional[str] = None
     search_query_filter: Optional[str] = None
 
-    # Web Search Query Generator
-    search_query_model: str = DEFAULT_SEARCH_QUERY_MODEL
-
     full_content_results: int = 3  # Number of search results to fetch full content for (0 to disable)
 
     # System Prompts
     stage1_prompt: str = STAGE1_PROMPT_DEFAULT
     stage2_prompt: str = STAGE2_PROMPT_DEFAULT
     stage3_prompt: str = STAGE3_PROMPT_DEFAULT
-
-    search_query_prompt: str = SEARCH_QUERY_PROMPT_DEFAULT
     
     # Execution Mode
     execution_mode: str = "full"  # Default execution mode: 'chat_only', 'chat_ranking', 'full'

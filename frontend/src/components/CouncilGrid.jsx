@@ -74,9 +74,9 @@ export default function CouncilGrid({
     // If no models provided, show placeholders
     const displayModels = models.length > 0 ? models : ['placeholder-1', 'placeholder-2', 'placeholder-3'];
 
+
     // Debug: Log model IDs
-    console.log('CouncilGrid Models:', models);
-    console.log('CouncilGrid Chairman:', chairman);
+
 
     // Tooltip State
     const [tooltip, setTooltip] = React.useState({ visible: false, x: 0, y: 0, content: '' });
