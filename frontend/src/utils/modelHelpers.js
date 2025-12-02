@@ -37,7 +37,7 @@ export const getModelVisuals = (modelId) => {
 
   // Groq (Provider, often Llama or Mixtral)
   if (id.includes('groq')) {
-    return { name: 'Groq', color: '#f55036', short: 'Groq', icon: '⚡' };
+    return { name: 'Groq', color: '#f97316', short: 'Groq', icon: '⚡' }; // Orange instead of red to avoid error-state appearance
   }
 
   // Local / Ollama
