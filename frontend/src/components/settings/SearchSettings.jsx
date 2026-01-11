@@ -22,12 +22,22 @@ const SEARCH_PROVIDERS = [
         requiresKey: true,
         keyType: 'brave',
     },
+    {
+        id: 'searxng',
+        name: 'SearxNG',
+        description: 'Self-hosted search. Use your own SearxNG instance.',
+        requiresKey: false,
+        keyType: null,
+    },
 ];
 
 export default function SearchSettings({
     settings,
     selectedSearchProvider,
     setSelectedSearchProvider,
+    // SearxNG
+    searxngBaseUrl,
+    setSearxngBaseUrl,
     // Tavily
     tavilyApiKey,
     setTavilyApiKey,
@@ -133,6 +143,21 @@ export default function SearchSettings({
                                         {braveTestResult.success ? '✓' : '✗'} {braveTestResult.message}
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {/* Inline URL Input for SearxNG */}
+                        {selectedSearchProvider === 'searxng' && provider.id === 'searxng' && (
+                            <div className="inline-api-key-section">
+                                <div className="api-key-input-row">
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. http://host.docker.internal:8081"
+                                        value={searxngBaseUrl}
+                                        onChange={e => setSearxngBaseUrl(e.target.value)}
+                                    />
+                                </div>
+                                <div className="key-status info">ℹ️ SearxNG instance URL</div>
                             </div>
                         )}
                     </div>

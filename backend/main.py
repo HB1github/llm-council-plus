@@ -211,7 +211,8 @@ async def send_message_stream(conversation_id: str, body: SendMessageRequest, re
                     5, 
                     provider, 
                     settings.full_content_results,
-                    settings.search_keyword_extraction
+                    settings.search_keyword_extraction,
+                    settings.searxng_base_url
                 )
                 search_context = search_result["results"]
                 extracted_query = search_result["extracted_query"]
@@ -352,6 +353,7 @@ class UpdateSettingsRequest(BaseModel):
     """Request to update settings."""
     search_provider: Optional[str] = None
     search_keyword_extraction: Optional[str] = None
+    searxng_base_url: Optional[str] = None
     ollama_base_url: Optional[str] = None
     full_content_results: Optional[int] = None
 
@@ -414,6 +416,7 @@ async def get_app_settings():
     return {
         "search_provider": settings.search_provider,
         "search_keyword_extraction": settings.search_keyword_extraction,
+        "searxng_base_url": settings.searxng_base_url,
         "ollama_base_url": settings.ollama_base_url,
         "full_content_results": settings.full_content_results,
 
@@ -507,6 +510,9 @@ async def update_app_settings(request: UpdateSettingsRequest):
                 detail="Invalid keyword extraction mode. Must be 'direct' or 'yake'"
             )
         updates["search_keyword_extraction"] = request.search_keyword_extraction
+
+    if request.searxng_base_url is not None:
+        updates["searxng_base_url"] = request.searxng_base_url
 
     if request.ollama_base_url is not None:
         updates["ollama_base_url"] = request.ollama_base_url
@@ -628,6 +634,7 @@ async def update_app_settings(request: UpdateSettingsRequest):
     return {
         "search_provider": settings.search_provider,
         "search_keyword_extraction": settings.search_keyword_extraction,
+        "searxng_base_url": settings.searxng_base_url,
         "ollama_base_url": settings.ollama_base_url,
         "full_content_results": settings.full_content_results,
 

@@ -68,8 +68,10 @@ from .prompts import (
 
 class Settings(BaseModel):
     """Application settings."""
+    # Search Settings
     search_provider: SearchProvider = SearchProvider.DUCKDUCKGO
     search_keyword_extraction: str = "direct"  # "direct" or "yake"
+    searxng_base_url: str = "http://localhost:8081"
 
     # API Keys
     tavily_api_key: Optional[str] = None

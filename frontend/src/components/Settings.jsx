@@ -17,6 +17,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
   const [settings, setSettings] = useState(null);
   const [selectedSearchProvider, setSelectedSearchProvider] = useState('duckduckgo');
   const [searchKeywordExtraction, setSearchKeywordExtraction] = useState('direct');
+  const [searxngBaseUrl, setSearxngBaseUrl] = useState('http://host.docker.internal:8081');
   const [fullContentResults, setFullContentResults] = useState(3);
 
   // OpenRouter State
@@ -129,6 +130,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
     const checkChanges = () => {
       if (selectedSearchProvider !== settings.search_provider) return true;
       if (searchKeywordExtraction !== (settings.search_keyword_extraction || 'direct')) return true;
+      if (searxngBaseUrl !== (settings.searxng_base_url || 'http://host.docker.internal:8081')) return true;
       if (fullContentResults !== (settings.full_content_results ?? 3)) return true;
       if (showFreeOnly !== (settings.show_free_only ?? false)) return true;
 
@@ -161,6 +163,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
     settings,
     selectedSearchProvider,
     searchKeywordExtraction,
+    searxngBaseUrl,
     fullContentResults,
     showFreeOnly,
     enabledProviders,
@@ -226,6 +229,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
 
       setSelectedSearchProvider(data.search_provider || 'duckduckgo');
       setSearchKeywordExtraction(data.search_keyword_extraction || 'direct');
+      setSearxngBaseUrl(data.searxng_base_url || 'http://host.docker.internal:8081');
       setFullContentResults(data.full_content_results ?? 3);
       setShowFreeOnly(data.show_free_only ?? false);
 
@@ -1032,6 +1036,7 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
       const updates = {
         search_provider: selectedSearchProvider,
         search_keyword_extraction: searchKeywordExtraction,
+        searxng_base_url: searxngBaseUrl,
         full_content_results: fullContentResults,
         show_free_only: showFreeOnly,
 
@@ -1351,6 +1356,9 @@ export default function Settings({ onClose, ollamaStatus, onRefreshOllama, initi
                 settings={settings}
                 selectedSearchProvider={selectedSearchProvider}
                 setSelectedSearchProvider={setSelectedSearchProvider}
+                // SearxNG
+                searxngBaseUrl={searxngBaseUrl}
+                setSearxngBaseUrl={setSearxngBaseUrl}
                 // Tavily
                 tavilyApiKey={tavilyApiKey}
                 setTavilyApiKey={setTavilyApiKey}

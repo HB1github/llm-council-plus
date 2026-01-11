@@ -201,6 +201,7 @@ class SearchProvider(str, Enum):
     DUCKDUCKGO = "duckduckgo"
     TAVILY = "tavily"
     BRAVE = "brave"
+    SEARXNG = "searxng"
 
 
 async def perform_web_search(
@@ -208,7 +209,8 @@ async def perform_web_search(
     max_results: int = 5,
     provider: SearchProvider = SearchProvider.DUCKDUCKGO,
     full_content_results: int = 3,
-    keyword_extraction: str = "direct"
+    keyword_extraction: str = "direct",
+    searxng_base_url: Optional[str] = None
 ) -> Dict[str, str]:
     """
     Perform a web search using the specified provider.
@@ -234,6 +236,8 @@ async def perform_web_search(
             results = await _search_tavily(extracted_query, max_results)
         elif provider == SearchProvider.BRAVE:
             results = await _search_brave(extracted_query, max_results, full_content_results)
+        elif provider == SearchProvider.SEARXNG:
+            results = await _search_searxng(extracted_query, searxng_base_url, max_results, full_content_results)
         else:
             # DuckDuckGo's DDGS library is synchronous, so run in thread
             results = await asyncio.to_thread(_search_duckduckgo, extracted_query, max_results, full_content_results)
@@ -525,3 +529,96 @@ async def _search_brave(query: str, max_results: int = 5, full_content_results: 
     except Exception as e:
         logger.error(f"Brave search error: {e}")
         return "[System Note: Brave search failed. Please try again.]"
+
+
+async def _search_searxng(query: str, base_url: str, max_results: int = 5, full_content_results: int = 3) -> str:
+    """
+    Search using a SearxNG instance (async).
+    Optionally fetches full content via Jina Reader for top N results.
+    """
+    if not base_url:
+        return "[System Note: SearxNG base URL not configured. Please add the URL in settings.]"
+
+    start_time = time.time()
+    try:
+        # Clean base_url (remove trailing slash)
+        base_url = base_url.rstrip('/')
+        search_url = f"{base_url}/search"
+        logger.info(f"SearxNG: Querying {search_url} with query: '{query}'")
+        
+        client = get_async_client()
+        response = await client.get(
+            search_url,
+            params={
+                "q": query,
+                "format": "json",
+                "pageno": 1
+            },
+            timeout=15.0
+        )
+        logger.info(f"SearxNG: Response status: {response.status_code}")
+        response.raise_for_status()
+        data = response.json()
+
+        search_results_data = []
+        urls_to_fetch = []
+        web_results = data.get("results", [])
+
+        for i, result in enumerate(web_results[:max_results], 1):
+            title = result.get("title", "No Title")
+            url = result.get("url", "#")
+            content = result.get("content", result.get("snippet", "No content available."))
+
+            search_results_data.append({
+                'index': i,
+                'title': title,
+                'url': url,
+                'summary': content,
+                'content': None
+            })
+
+            # Queue top N results for full content fetch
+            if full_content_results > 0 and i <= full_content_results and url and url != '#':
+                urls_to_fetch.append((i - 1, url))
+
+        # Fetch full content via Jina Reader for top results
+        for idx, url in urls_to_fetch:
+            # Check remaining time budget
+            elapsed = time.time() - start_time
+            remaining = SEARCH_TIMEOUT_BUDGET - elapsed
+
+            if remaining <= 5:
+                logger.warning(f"Search timeout budget exhausted, skipping remaining SearxNG content fetches")
+                break
+
+            content = await _fetch_with_jina(url, timeout=min(remaining, 25.0))
+            if content:
+                if len(content) < 500:
+                    original_summary = search_results_data[idx]['summary']
+                    content += f"\n\n[System Note: Full content fetch yielded limited text. Appending original summary.]\nOriginal Summary: {original_summary}"
+                search_results_data[idx]['content'] = content
+
+        if not search_results_data:
+            return "No web search results found via SearxNG."
+
+        # Format results
+        formatted = []
+        for r in search_results_data:
+            text = f"Result {r['index']}:\nTitle: {r['title']}\nURL: {r['url']}"
+            if r['content']:
+                content = r['content'][:2000]
+                if len(r['content']) > 2000:
+                    content += "..."
+                text += f"\nContent:\n{content}"
+            else:
+                text += f"\nSummary: {r['summary']}"
+            formatted.append(text)
+
+        return "\n\n".join(formatted)
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"SearxNG API error: {e.response.status_code} - {e.response.text}")
+        return f"[System Note: SearxNG search failed with status {e.response.status_code}. Is the instance running?]"
+    except Exception as e:
+        logger.error(f"SearxNG search error: {e}")
+        return f"[System Note: SearxNG search failed: {str(e)}]"

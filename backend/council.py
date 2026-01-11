@@ -665,4 +665,4 @@ def generate_search_query(user_query: str) -> str:
     Returns:
         User query truncated to 100 characters for safety
     """
-    return user_query[:100]  # Truncate for safety
+    return user_query[:300]  # Increased truncation for better context
