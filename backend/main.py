@@ -350,6 +350,9 @@ class UpdateSettingsRequest(BaseModel):
     # Execution Mode
     execution_mode: Optional[str] = None
 
+    # Sequential Ollama (for GPU memory constraints)
+    sequential_ollama: Optional[bool] = None
+
     # System Prompts
     stage1_prompt: Optional[str] = None
     stage2_prompt: Optional[str] = None
@@ -412,6 +415,9 @@ async def get_app_settings():
         "stage1_prompt": settings.stage1_prompt,
         "stage2_prompt": settings.stage2_prompt,
         "stage3_prompt": settings.stage3_prompt,
+        
+        # Sequential Ollama
+        "sequential_ollama": settings.sequential_ollama,
     }
 
 
@@ -567,6 +573,10 @@ async def update_app_settings(request: UpdateSettingsRequest):
                 detail=f"Invalid execution_mode. Must be one of: {valid_modes}"
             )
         updates["execution_mode"] = request.execution_mode
+
+    # Sequential Ollama (for GPU memory constraints)
+    if request.sequential_ollama is not None:
+        updates["sequential_ollama"] = request.sequential_ollama
 
     if updates:
         settings = update_settings(**updates)

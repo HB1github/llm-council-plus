@@ -11,13 +11,13 @@ from .search import SearchProvider
 SETTINGS_FILE = Path(__file__).parent.parent / "data" / "settings.json"
 
 # Default models (matches original llm-council defaults)
-DEFAULT_COUNCIL_MODELS = ["", ""]
-DEFAULT_CHAIRMAN_MODEL = ""
+DEFAULT_COUNCIL_MODELS = ["ollama:0xroyce/plutus:latest", "ollama:deepseek-r1:latest"]
+DEFAULT_CHAIRMAN_MODEL = "ollama:mistral-nemo:latest"
 
 # Default enabled providers
 DEFAULT_ENABLED_PROVIDERS = {
     "openrouter": True,
-    "ollama": False,
+    "ollama": True,
     "groq": False,
     "direct": False,  # Master toggle for all direct connections
     "custom": False   # Custom OpenAI-compatible endpoint
@@ -26,8 +26,8 @@ DEFAULT_ENABLED_PROVIDERS = {
 # Default direct provider toggles (individual)
 DEFAULT_DIRECT_PROVIDER_TOGGLES = {
     "openai": False,
-    "anthropic": False,
-    "google": False,
+    "anthropic": True,
+    "google": True,
     "mistral": False,
     "deepseek": False,
     "groq": False
@@ -120,6 +120,9 @@ class Settings(BaseModel):
     
     # Execution Mode
     execution_mode: str = "full"  # Default execution mode: 'chat_only', 'chat_ranking', 'full'
+    
+    # Sequential Ollama execution (for GPUs with limited VRAM)
+    sequential_ollama: bool = True  # Run Ollama models one at a time to avoid OOM
 
 
 def get_settings() -> Settings:

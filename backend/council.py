@@ -127,6 +127,7 @@ async def stage1_collect_responses(user_query: str, search_context: str = "", re
     yield len(models)
 
     council_temp = settings.council_temperature
+    sequential_ollama = settings.sequential_ollama
 
     async def _query_safe(m: str):
         try:
@@ -134,10 +135,47 @@ async def stage1_collect_responses(user_query: str, search_context: str = "", re
         except Exception as e:
             return m, {"error": True, "error_message": str(e)}
 
-    # Create tasks
-    tasks = [asyncio.create_task(_query_safe(m)) for m in models]
+    # Separate Ollama models for sequential execution if enabled
+    ollama_models = [m for m in models if m.startswith("ollama:")]
+    other_models = [m for m in models if not m.startswith("ollama:")]
     
-    # Process as they complete
+    # Create tasks for non-Ollama models (parallel)
+    tasks = [asyncio.create_task(_query_safe(m)) for m in other_models]
+    
+    # Process Ollama models sequentially to avoid GPU OOM
+    if sequential_ollama and ollama_models:
+        for m in ollama_models:
+            # Check for client disconnect before each Ollama query
+            if request and await request.is_disconnected():
+                logger.info("Client disconnected during Stage 1 Ollama query.")
+                raise asyncio.CancelledError("Client disconnected")
+            
+            model, response = await _query_safe(m)
+            result = None
+            if response is not None:
+                if response.get('error'):
+                    result = {
+                        "model": model,
+                        "response": None,
+                        "error": response.get('error'),
+                        "error_message": response.get('error_message', 'Unknown error')
+                    }
+                else:
+                    content = response.get('content', '')
+                    if not isinstance(content, str):
+                        content = str(content) if content is not None else ''
+                    result = {
+                        "model": model,
+                        "response": content,
+                        "error": None
+                    }
+            if result:
+                yield result
+    else:
+        # If not sequential, add Ollama models to parallel tasks
+        tasks.extend([asyncio.create_task(_query_safe(m)) for m in ollama_models])
+    
+    # Process remaining parallel tasks as they complete
     pending = set(tasks)
     try:
         while pending:
@@ -256,6 +294,7 @@ async def stage2_collect_rankings(
 
     # Use dedicated Stage 2 temperature (lower for consistent ranking output)
     stage2_temp = settings.stage2_temperature
+    sequential_ollama = settings.sequential_ollama
 
     async def _query_safe(m: str):
         try:
@@ -263,10 +302,51 @@ async def stage2_collect_rankings(
         except Exception as e:
             return m, {"error": True, "error_message": str(e)}
 
-    # Create tasks
-    tasks = [asyncio.create_task(_query_safe(m)) for m in successful_models]
+    # Separate Ollama models for sequential execution if enabled
+    ollama_models = [m for m in successful_models if m.startswith("ollama:")]
+    other_models = [m for m in successful_models if not m.startswith("ollama:")]
+    
+    # Create tasks for non-Ollama models (parallel)
+    tasks = [asyncio.create_task(_query_safe(m)) for m in other_models]
+    
+    # Process Ollama models sequentially to avoid GPU OOM
+    if sequential_ollama and ollama_models:
+        for m in ollama_models:
+            # Check for client disconnect before each Ollama query
+            if request and await request.is_disconnected():
+                logger.info("Client disconnected during Stage 2 Ollama query.")
+                raise asyncio.CancelledError("Client disconnected")
+            
+            model, response = await _query_safe(m)
+            result = None
+            if response is not None:
+                if response.get('error'):
+                    result = {
+                        "model": model,
+                        "ranking": None,
+                        "parsed_ranking": [],
+                        "error": response.get('error'),
+                        "error_message": response.get('error_message', 'Unknown error')
+                    }
+                else:
+                    full_text = response.get('content', '')
+                    if not isinstance(full_text, str):
+                        full_text = str(full_text) if full_text is not None else ''
+                    expected_count = len(successful_results)
+                    parsed = parse_ranking_from_text(full_text, expected_count=expected_count)
+                    result = {
+                        "model": model,
+                        "ranking": full_text,
+                        "parsed_ranking": parsed,
+                        "error": None
+                    }
+            if result:
+                yield result
+    else:
+        # If not sequential, add Ollama models to parallel tasks
+        tasks.extend([asyncio.create_task(_query_safe(m)) for m in ollama_models])
 
-    # Process as they complete
+    # Process remaining parallel tasks as they complete
     pending = set(tasks)
     try:
         while pending:
