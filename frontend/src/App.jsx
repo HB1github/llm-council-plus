@@ -254,7 +254,7 @@ function App() {
     }
   };
 
-  const handleSendMessage = async (content, webSearch) => {
+  const handleSendMessage = async (content, webSearch, fileIds = []) => {
     if (!currentConversationId) return;
 
     // Assign unique ID to this request to prevent race conditions
@@ -308,7 +308,7 @@ function App() {
       // Send message with streaming
       await api.sendMessageStream(
         currentConversationId,
-        { content, webSearch, executionMode },
+        { content, webSearch, executionMode, fileIds },
         (eventType, event) => {
           switch (eventType) {
             case 'search_start':

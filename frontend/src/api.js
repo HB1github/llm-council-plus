@@ -263,6 +263,26 @@ export const api = {
   },
 
   /**
+   * Upload a file for attachment.
+   * @param {File} file - The file to upload
+   * @returns {Promise<{file_id: string, original_name: string, file_type: string}>}
+   */
+  async uploadFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch(`${API_BASE}/api/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(error.detail || 'Failed to upload file');
+    }
+    return response.json();
+  },
+
+  /**
    * Update application settings.
    */
   async updateSettings(settings) {
@@ -291,7 +311,7 @@ export const api = {
    * @returns {Promise<void>}
    */
   async sendMessageStream(conversationId, options, onEvent, signal) {
-    const { content, webSearch = false, executionMode = 'full' } = options;
+    const { content, webSearch = false, executionMode = 'full', fileIds = [] } = options;
     const response = await fetch(
       `${API_BASE}/api/conversations/${conversationId}/message/stream?_t=${Date.now()}`,
       {
@@ -300,7 +320,7 @@ export const api = {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-cache',
         },
-        body: JSON.stringify({ content, web_search: webSearch, execution_mode: executionMode }),
+        body: JSON.stringify({ content, web_search: webSearch, execution_mode: executionMode, file_ids: fileIds.length > 0 ? fileIds : undefined }),
         signal,
         cache: 'no-store',
       }

@@ -1,8 +1,8 @@
 """FastAPI backend for LLM Council."""
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import os
@@ -14,6 +14,7 @@ from . import storage
 from .council import generate_conversation_title, generate_search_query, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings, PROVIDERS
 from .search import perform_web_search, SearchProvider
 from .settings import get_settings, update_settings, Settings, DEFAULT_COUNCIL_MODELS, DEFAULT_CHAIRMAN_MODEL, AVAILABLE_MODELS
+from . import file_handler
 
 app = FastAPI(title="LLM Council Plus API")
 
@@ -38,6 +39,7 @@ class SendMessageRequest(BaseModel):
     content: str
     web_search: bool = False
     execution_mode: str = "full"  # 'chat_only', 'chat_ranking', 'full'
+    file_ids: Optional[List[str]] = None  # Attached file IDs
 
 
 class ConversationMetadata(BaseModel):
@@ -94,6 +96,34 @@ async def delete_conversation(conversation_id: str):
     return {"status": "deleted"}
 
 
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """
+    Upload a file to attach to a council message.
+    
+    Supported file types:
+    - Text: .txt, .md, .csv, .json, .py, .js, .ts, .log, .xml, .yaml, .yml
+    - Images: .png, .jpg, .jpeg, .gif, .webp
+    """
+    try:
+        content = await file.read()
+        result = file_handler.save_uploaded_file(content, file.filename or "unnamed")
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+@app.get("/api/files/{file_id}")
+async def get_file_info(file_id: str):
+    """Get information about an uploaded file."""
+    info = file_handler.get_file_info(file_id)
+    if not info:
+        raise HTTPException(status_code=404, detail="File not found")
+    return info
+
+
 @app.post("/api/conversations/{conversation_id}/message/stream")
 async def send_message_stream(conversation_id: str, body: SendMessageRequest, request: Request):
     """Send a message and stream the 3-stage council process."""
@@ -129,6 +159,18 @@ async def send_message_stream(conversation_id: str, body: SendMessageRequest, re
             title_task = None
             if is_first_message:
                 title_task = asyncio.create_task(generate_conversation_title(body.content))
+
+            # Process attached files
+            file_context = ""
+            if body.file_ids:
+                file_context = file_handler.format_files_for_prompt(body.file_ids)
+                if file_context:
+                    yield f"data: {json.dumps({'type': 'files_processed', 'data': {'count': len(body.file_ids)}})}\\n\\n"
+
+            # Build the full query with file context
+            full_query = body.content
+            if file_context:
+                full_query = f"{body.content}\n\n--- Attached Files ---\n{file_context}"
 
             # Perform web search if requested
             search_context = ""
@@ -182,7 +224,7 @@ async def send_message_stream(conversation_id: str, body: SendMessageRequest, re
             
             total_models = 0
             
-            async for item in stage1_collect_responses(body.content, search_context, request):
+            async for item in stage1_collect_responses(full_query, search_context, request):
                 if isinstance(item, int):
                     total_models = item
                     print(f"DEBUG: Sending stage1_init with total={total_models}")
@@ -209,7 +251,7 @@ async def send_message_stream(conversation_id: str, body: SendMessageRequest, re
                 await asyncio.sleep(0.05)
                 
                 # Iterate over the async generator
-                async for item in stage2_collect_rankings(body.content, stage1_results, search_context, request):
+                async for item in stage2_collect_rankings(full_query, stage1_results, search_context, request):
                     # First item is the label mapping
                     if isinstance(item, dict) and not item.get('model'):
                         label_to_model = item
@@ -239,7 +281,7 @@ async def send_message_stream(conversation_id: str, body: SendMessageRequest, re
                     print("Client disconnected before Stage 3")
                     raise asyncio.CancelledError("Client disconnected")
 
-                stage3_result = await stage3_synthesize_final(body.content, stage1_results, stage2_results, search_context)
+                stage3_result = await stage3_synthesize_final(full_query, stage1_results, stage2_results, search_context)
                 yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
             # Wait for title generation if it was started

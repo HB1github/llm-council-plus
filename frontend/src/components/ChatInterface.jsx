@@ -25,8 +25,11 @@ export default function ChatInterface({
 }) {
     const [input, setInput] = useState('');
     const [webSearch, setWebSearch] = useState(false);
+    const [attachedFiles, setAttachedFiles] = useState([]);  // {file_id, original_name, file_type}
+    const [isUploading, setIsUploading] = useState(false);
     const messagesEndRef = useRef(null);
     const messagesContainerRef = useRef(null);
+    const fileInputRef = useRef(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -49,10 +52,38 @@ export default function ChatInterface({
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (input.trim() && !isLoading) {
-            onSendMessage(input, webSearch);
+        if (input.trim() && !isLoading && !isUploading) {
+            const fileIds = attachedFiles.map(f => f.file_id);
+            onSendMessage(input, webSearch, fileIds);
             setInput('');
+            setAttachedFiles([]);  // Clear attachments after sending
         }
+    };
+
+    const handleFileSelect = async (e) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+
+        setIsUploading(true);
+        try {
+            for (const file of files) {
+                const result = await api.uploadFile(file);
+                setAttachedFiles(prev => [...prev, result]);
+            }
+        } catch (error) {
+            console.error('File upload failed:', error);
+            alert(`Upload failed: ${error.message}`);
+        } finally {
+            setIsUploading(false);
+            // Reset file input
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
+    };
+
+    const removeAttachedFile = (fileId) => {
+        setAttachedFiles(prev => prev.filter(f => f.file_id !== fileId));
     };
 
     const handleKeyDown = (e) => {
@@ -248,13 +279,28 @@ export default function ChatInterface({
                                 {webSearch && <span className="search-label">Search On</span>}
                             </label>
 
+                            {/* File Attachment Button */}
+                            <label className={`file-attach-toggle ${attachedFiles.length > 0 ? 'active' : ''}`} title="Attach Files">
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    className="file-input-hidden"
+                                    onChange={handleFileSelect}
+                                    disabled={isLoading || isUploading}
+                                    multiple
+                                    accept=".txt,.md,.csv,.json,.py,.js,.ts,.log,.xml,.yaml,.yml,.html,.css,.png,.jpg,.jpeg,.gif,.webp"
+                                />
+                                <span className="file-icon">{isUploading ? '⏳' : '📎'}</span>
+                                {attachedFiles.length > 0 && <span className="file-count">{attachedFiles.length}</span>}
+                            </label>
+
                             <textarea
                                 className="message-input"
-                                placeholder={isLoading ? "Consulting..." : "Ask the Council..."}
+                                placeholder={isLoading ? "Consulting..." : isUploading ? "Uploading..." : "Ask the Council..."}
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                disabled={isLoading}
+                                disabled={isLoading || isUploading}
                                 rows={1}
                                 style={{ height: 'auto', minHeight: '24px' }}
                             />
@@ -264,11 +310,29 @@ export default function ChatInterface({
                                     ⏹
                                 </button>
                             ) : (
-                                <button type="submit" className="send-button" disabled={!input.trim()}>
+                                <button type="submit" className="send-button" disabled={!input.trim() || isUploading}>
                                     ➤
                                 </button>
                             )}
                         </div>
+
+                        {/* Attached Files Display */}
+                        {attachedFiles.length > 0 && (
+                            <div className="attached-files-row">
+                                {attachedFiles.map(file => (
+                                    <div key={file.file_id} className={`file-chip ${file.file_type}`}>
+                                        <span className="file-chip-icon">{file.file_type === 'image' ? '🖼️' : '📄'}</span>
+                                        <span className="file-chip-name">{file.original_name}</span>
+                                        <button
+                                            type="button"
+                                            className="file-chip-remove"
+                                            onClick={() => removeAttachedFile(file.file_id)}
+                                            disabled={isLoading}
+                                        >×</button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
                         <div className="input-row-bottom">
                             <ExecutionModeToggle
